@@ -4,7 +4,7 @@
 
 API REST para la gestión de una clínica con varios médicos: agenda de citas, expedientes clínicos, chat entre pacientes y clínica, y recordatorios de citas por WhatsApp.
 
-> **Estado:** en desarrollo (fase 1: configuración base y módulo de usuarios).
+> **Estado:** en desarrollo (fase 2: base de datos PostgreSQL con Docker y Prisma).
 > Proyecto de portafolio. Todos los datos de pruebas son **ficticios**.
 
 ## Funcionalidades
@@ -31,49 +31,90 @@ API REST para la gestión de una clínica con varios médicos: agenda de citas, 
 ## Tecnologías
 
 - **Runtime:** Node.js + TypeScript
+- **Framework web:** Express 5
+- **Base de datos:** PostgreSQL 18 (Docker)
+- **ORM:** Prisma 7 con el driver adapter de `pg`
 - **Validación:** Zod
 - **Calidad de código:** ESLint (typescript-eslint) y Prettier
-- **Por agregar:** Express, PostgreSQL, Socket.IO, WhatsApp Cloud API, Vitest, Docker
+- **Por agregar:** Socket.IO, WhatsApp Cloud API, Vitest
 
 ## Requisitos
 
 - Node.js 22 o superior
 - npm
+- Docker Desktop (o Docker Engine con Docker Compose)
 
 ## Instalación
 
 ```bash
 git clone <url-del-repositorio>
 cd medical-api
-npm install
+npm install            # también genera el cliente de Prisma
 cp .env.example .env   # y completa los valores
+npm run db:up          # levanta PostgreSQL en Docker
+npm run db:migrate     # aplica las migraciones
 npm run dev
 ```
 
+Comprueba que todo funciona en `GET http://localhost:3000/health`.
+
+> La base de datos se expone en el puerto **5433** para no chocar con una instalación local de PostgreSQL que use el 5432.
+
 ## Variables de entorno
 
-| Variable       | Descripción                           |
-| -------------- | ------------------------------------- |
-| `PORT`         | Puerto en el que corre la API         |
-| `DATABASE_URL` | Cadena de conexión a la base de datos |
-| `JWT_SECRET`   | Clave para firmar los tokens JWT      |
+| Variable            | Descripción                                   | Ejemplo                                                                 |
+| ------------------- | --------------------------------------------- | ----------------------------------------------------------------------- |
+| `NODE_ENV`          | Entorno: `development`, `test` o `production` | `development`                                                           |
+| `PORT`              | Puerto en el que corre la API                 | `3000`                                                                  |
+| `POSTGRES_USER`     | Usuario de PostgreSQL que crea Docker         | `medical`                                                               |
+| `POSTGRES_PASSWORD` | Contraseña de PostgreSQL que crea Docker      | `medical`                                                               |
+| `POSTGRES_DB`       | Base de datos que crea Docker                 | `medical_api`                                                           |
+| `DATABASE_URL`      | Cadena de conexión que usan Prisma y la API   | `postgresql://medical:medical@localhost:5433/medical_api?schema=public` |
+| `JWT_SECRET`        | Clave para firmar los tokens JWT              | una cadena larga y aleatoria                                            |
+
+Los valores de `POSTGRES_*` deben coincidir con el usuario, la contraseña y la base de datos de `DATABASE_URL`.
 
 ## Scripts
 
-| Comando             | Descripción                                                  |
-| ------------------- | ------------------------------------------------------------ |
-| `npm run dev`       | Inicia el servidor en modo desarrollo con recarga automática |
-| `npm run typecheck` | Verifica los tipos con TypeScript                            |
-| `npm run lint`      | Revisa el código con ESLint                                  |
-| `npm run format`    | Formatea el código con Prettier                              |
-| `npm run check`     | Ejecuta typecheck, lint y la revisión de formato             |
+| Comando               | Descripción                                                  |
+| --------------------- | ------------------------------------------------------------ |
+| `npm run dev`         | Inicia el servidor en modo desarrollo con recarga automática |
+| `npm run typecheck`   | Verifica los tipos con TypeScript                            |
+| `npm run lint`        | Revisa el código con ESLint                                  |
+| `npm run format`      | Formatea el código con Prettier                              |
+| `npm run check`       | Ejecuta typecheck, lint y la revisión de formato             |
+| `npm run db:up`       | Levanta el contenedor de PostgreSQL                          |
+| `npm run db:down`     | Detiene el contenedor de PostgreSQL (los datos se conservan) |
+| `npm run db:migrate`  | Crea y aplica migraciones a partir del schema de Prisma      |
+| `npm run db:generate` | Genera el cliente de Prisma                                  |
+| `npm run db:studio`   | Abre Prisma Studio para ver los datos                        |
+
+## Endpoints
+
+| Método | Ruta      | Descripción                                                                                        |
+| ------ | --------- | -------------------------------------------------------------------------------------------------- |
+| `GET`  | `/health` | Estado de la API y de la conexión a la base de datos (`200` disponible, `503` base de datos caída) |
 
 ## Estructura del proyecto
 
 ```
+prisma/
+├── schema.prisma          # modelos de la base de datos
+└── migrations/            # historial de migraciones en SQL
 src/
-├── index.ts
+├── index.ts               # arranca el servidor y maneja el apagado
+├── app.ts                 # crea y configura la app de Express
+├── config/
+│   └── env.ts             # variables de entorno validadas con Zod
+├── db/
+│   └── prisma.ts          # instancia del cliente de Prisma
+├── generated/             # cliente de Prisma generado (no se sube a git)
+├── shared/
+│   ├── errors/            # clases de error propias
+│   └── middlewares/       # manejadores de 404 y de errores
 └── modules/
+    ├── health/
+    │   └── health.routes.ts
     └── users/
         ├── users.controller.ts
         ├── users.model.ts
@@ -82,19 +123,20 @@ src/
         └── users.types.ts
 ```
 
-Cada módulo agrupa su schema de validación, tipos, modelo, controlador y rutas.
+Cada módulo agrupa su schema de validación, tipos, acceso a datos, controlador y rutas.
 
 ## Plan de desarrollo
 
-1. Configuración base: TypeScript, linting, Express, manejo de errores y endpoint `/health`
-2. Autenticación y roles
-3. Catálogos: médicos, servicios y horarios
-4. Citas y disponibilidad
-5. Expedientes clínicos y auditoría
-6. Chat en tiempo real
-7. Recordatorios por WhatsApp
-8. Archivos adjuntos
-9. Documentación, seguridad y despliegue
+1. ~~Configuración base: TypeScript, linting, Express, manejo de errores y endpoint `/health`~~ ✅
+2. PostgreSQL con Docker y Prisma (en curso)
+3. Autenticación y roles
+4. Catálogos: médicos, servicios y horarios
+5. Citas y disponibilidad
+6. Expedientes clínicos y auditoría
+7. Chat en tiempo real
+8. Recordatorios por WhatsApp
+9. Archivos adjuntos
+10. Documentación, seguridad y despliegue
 
 ## Privacidad de datos
 

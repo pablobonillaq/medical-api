@@ -14,5 +14,6 @@
     "moduleDetection": "force",
     "skipLibCheck": true,
     "noEmit": true
-  }
+  },
+  "include": ["src"]
 }

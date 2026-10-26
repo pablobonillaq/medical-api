@@ -3,7 +3,7 @@ import { defineConfig } from 'eslint/config'
 import tseslint from 'typescript-eslint'
 
 export default defineConfig(
-  { ignores: ['dist', 'coverage'] },
+  { ignores: ['dist', 'coverage', 'src/generated'] },
   eslint.configs.recommended,
   tseslint.configs.recommendedTypeChecked,
   {
@@ -12,8 +12,8 @@ export default defineConfig(
     },
   },
   {
-  rules: {
-    '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }]
-  }
-}
+    rules: {
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+    },
+  },
 )

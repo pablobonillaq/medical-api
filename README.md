@@ -4,7 +4,7 @@
 
 REST API for managing a multi-doctor clinic: appointment scheduling, electronic medical records, patient–clinic chat, and appointment reminders via WhatsApp.
 
-> **Status:** in development (phase 1: base setup and users module).
+> **Status:** in development (phase 2: PostgreSQL database with Docker and Prisma).
 > Portfolio project. All test data is **fictitious**.
 
 ## Features
@@ -31,49 +31,90 @@ REST API for managing a multi-doctor clinic: appointment scheduling, electronic 
 ## Tech stack
 
 - **Runtime:** Node.js + TypeScript
+- **Web framework:** Express 5
+- **Database:** PostgreSQL 18 (Docker)
+- **ORM:** Prisma 7 with the `pg` driver adapter
 - **Validation:** Zod
 - **Code quality:** ESLint (typescript-eslint) and Prettier
-- **Coming soon:** Express, PostgreSQL, Socket.IO, WhatsApp Cloud API, Vitest, Docker
+- **Coming soon:** Socket.IO, WhatsApp Cloud API, Vitest
 
 ## Requirements
 
 - Node.js 22 or later
 - npm
+- Docker Desktop (or Docker Engine with Docker Compose)
 
 ## Getting started
 
 ```bash
 git clone <repository-url>
 cd medical-api
-npm install
+npm install            # also generates the Prisma client
 cp .env.example .env   # then fill in the values
+npm run db:up          # starts PostgreSQL in Docker
+npm run db:migrate     # applies the database migrations
 npm run dev
 ```
 
+Check that everything works at `GET http://localhost:3000/health`.
+
+> The database is exposed on port **5433** to avoid conflicts with a local PostgreSQL installation using 5432.
+
 ## Environment variables
 
-| Variable       | Description                  |
-| -------------- | ---------------------------- |
-| `PORT`         | Port the API runs on         |
-| `DATABASE_URL` | Database connection string   |
-| `JWT_SECRET`   | Secret key used to sign JWTs |
+| Variable            | Description                                        | Example                                                                 |
+| ------------------- | -------------------------------------------------- | ----------------------------------------------------------------------- |
+| `NODE_ENV`          | Environment: `development`, `test` or `production` | `development`                                                           |
+| `PORT`              | Port the API runs on                               | `3000`                                                                  |
+| `POSTGRES_USER`     | PostgreSQL user created by Docker                  | `medical`                                                               |
+| `POSTGRES_PASSWORD` | PostgreSQL password created by Docker              | `medical`                                                               |
+| `POSTGRES_DB`       | Database created by Docker                         | `medical_api`                                                           |
+| `DATABASE_URL`      | Connection string used by Prisma and the API       | `postgresql://medical:medical@localhost:5433/medical_api?schema=public` |
+| `JWT_SECRET`        | Secret key used to sign JWTs                       | a long random string                                                    |
+
+The `POSTGRES_*` values must match the user, password and database in `DATABASE_URL`.
 
 ## Scripts
 
-| Command             | Description                                   |
-| ------------------- | --------------------------------------------- |
-| `npm run dev`       | Starts the development server with hot reload |
-| `npm run typecheck` | Type-checks the code with TypeScript          |
-| `npm run lint`      | Lints the code with ESLint                    |
-| `npm run format`    | Formats the code with Prettier                |
-| `npm run check`     | Runs typecheck, lint and the format check     |
+| Command               | Description                                           |
+| --------------------- | ----------------------------------------------------- |
+| `npm run dev`         | Starts the development server with hot reload         |
+| `npm run typecheck`   | Type-checks the code with TypeScript                  |
+| `npm run lint`        | Lints the code with ESLint                            |
+| `npm run format`      | Formats the code with Prettier                        |
+| `npm run check`       | Runs typecheck, lint and the format check             |
+| `npm run db:up`       | Starts the PostgreSQL container                       |
+| `npm run db:down`     | Stops the PostgreSQL container (data is kept)         |
+| `npm run db:migrate`  | Creates and applies migrations from the Prisma schema |
+| `npm run db:generate` | Generates the Prisma client                           |
+| `npm run db:studio`   | Opens Prisma Studio to browse the data                |
+
+## API endpoints
+
+| Method | Path      | Description                                                        |
+| ------ | --------- | ------------------------------------------------------------------ |
+| `GET`  | `/health` | API status and database connection (`200` up, `503` database down) |
 
 ## Project structure
 
 ```
+prisma/
+├── schema.prisma          # database models
+└── migrations/            # SQL migration history
 src/
-├── index.ts
+├── index.ts               # starts the server and handles shutdown
+├── app.ts                 # creates and configures the Express app
+├── config/
+│   └── env.ts             # environment variables validated with Zod
+├── db/
+│   └── prisma.ts          # Prisma client instance
+├── generated/             # generated Prisma client (not committed)
+├── shared/
+│   ├── errors/            # custom error classes
+│   └── middlewares/       # 404 and error handlers
 └── modules/
+    ├── health/
+    │   └── health.routes.ts
     └── users/
         ├── users.controller.ts
         ├── users.model.ts
@@ -82,19 +123,20 @@ src/
         └── users.types.ts
 ```
 
-Each module groups its validation schema, types, model, controller and routes.
+Each module groups its validation schema, types, data access, controller and routes.
 
 ## Roadmap
 
-1. Base setup: TypeScript, linting, Express, error handling and `/health` endpoint
-2. Authentication and roles
-3. Catalogs: doctors, services and schedules
-4. Appointments and availability
-5. Medical records and audit log
-6. Real-time chat
-7. WhatsApp reminders
-8. File attachments
-9. Documentation, security and deployment
+1. ~~Base setup: TypeScript, linting, Express, error handling and `/health` endpoint~~ ✅
+2. PostgreSQL with Docker and Prisma (in progress)
+3. Authentication and roles
+4. Catalogs: doctors, services and schedules
+5. Appointments and availability
+6. Medical records and audit log
+7. Real-time chat
+8. WhatsApp reminders
+9. File attachments
+10. Documentation, security and deployment
 
 ## Data privacy
 
