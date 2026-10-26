@@ -1,15 +1,18 @@
 {
   "name": "medical-api",
   "version": "1.0.0",
-  "description": "",
+  "description": "API REST para la gestión de una clínica con varios médicos: agenda de citas, expedientes clínicos, chat entre pacientes y clínica, y recordatorios de citas por WhatsApp.",
+  "engines": {
+    "node": ">=22"
+  },
   "main": "src/index.ts",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "echo \"Error: no test specified\" && exit 1",
     "lint": "eslint src",
-    "format": "prettier --write src",
-    "check": "npm run typecheck && npm run lint && prettier --check src"
+    "format": "prettier --write .",
+    "check": "npm run typecheck && npm run lint && prettier --check ."
   },
   "keywords": [],
   "author": "",

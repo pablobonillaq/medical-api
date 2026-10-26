@@ -8,7 +8,7 @@ export default defineConfig(
   tseslint.configs.recommendedTypeChecked,
   {
     languageOptions: {
-      parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname }
-    }
-  }
+      parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
+    },
+  },
 )
