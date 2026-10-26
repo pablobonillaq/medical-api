@@ -1,0 +1,5 @@
+### Health
+GET http://localhost:3000/health
+
+### Ruta inexistente → 404
+GET http://localhost:3000/no-existe
