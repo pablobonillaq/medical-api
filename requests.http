@@ -3,3 +3,48 @@ GET http://localhost:3000/health
 
 ### Ruta inexistente → 404
 GET http://localhost:3000/no-existe
+
+### Registro de paciente → 201
+POST http://localhost:3000/auth/register
+Content-Type: application/json
+
+{ "email": "paciente@test.com", "password": "12345678" }
+
+### Mismo email → 409
+POST http://localhost:3000/auth/register
+Content-Type: application/json
+
+{ "email": "paciente@test.com", "password": "12345678" }
+
+### Datos inválidos → 400 con detalle por campo
+POST http://localhost:3000/auth/register
+Content-Type: application/json
+
+{ "email": "no-es-email", "password": "123" }
+
+### Intento de registrarse como admin → 201, pero con role "patient"
+POST http://localhost:3000/auth/register
+Content-Type: application/json
+
+{ "email": "hacker@test.com", "password": "12345678", "role": "admin" }
+
+### Contraseña incorrecta → 401
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{ "email": "paciente@test.com", "password": "incorrecta" }
+
+### Login correcto → 200 y cookie access_token
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{ "email": "paciente@test.com", "password": "12345678" }
+
+### Usuario actual (usa la cookie del login) → 200
+GET http://localhost:3000/auth/me
+
+### Logout → 204
+POST http://localhost:3000/auth/logout
+
+### Después del logout → 401
+GET http://localhost:3000/auth/me

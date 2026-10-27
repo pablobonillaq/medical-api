@@ -8,12 +8,18 @@ export default defineConfig(
   tseslint.configs.recommendedTypeChecked,
   {
     languageOptions: {
-      parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
+      parserOptions: {
+        projectService: { allowDefaultProject: ['eslint.config.js', 'prisma7.config.ts'] },
+        tsconfigRootDir: import.meta.dirname,
+      },
     },
   },
   {
     rules: {
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', ignoreRestSiblings: true },
+      ],
     },
   },
 )

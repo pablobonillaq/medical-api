@@ -13,6 +13,7 @@ const envSchema = z.object({
     protocol: /^postgres(ql)?$/,
     error: 'DATABASE_URL must be a PostgreSQL URL',
   }),
+  JWT_SECRET: z.string().min(32, { error: 'JWT_SECRET must be at least 32 characters' }),
 })
 
 const result = envSchema.safeParse(process.env)

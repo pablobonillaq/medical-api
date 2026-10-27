@@ -25,7 +25,4 @@ export const createStaffSchema = z.object({
 
 export type RegisterPatientInput = z.infer<typeof registerPatientSchema>
 export type CreateStaffInput = z.infer<typeof createStaffSchema>
-
-export const validateRegisterPatient = (input: unknown) => registerPatientSchema.safeParse(input)
-export const validateLogin = (input: unknown) => loginSchema.safeParse(input)
-export const validateCreateStaff = (input: unknown) => createStaffSchema.safeParse(input)
+export type LoginInput = z.infer<typeof loginSchema>

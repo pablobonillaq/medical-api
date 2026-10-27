@@ -4,7 +4,7 @@
 
 API REST para la gestión de una clínica con varios médicos: agenda de citas, expedientes clínicos, chat entre pacientes y clínica, y recordatorios de citas por WhatsApp.
 
-> **Estado:** en desarrollo (fase 2: base de datos PostgreSQL con Docker y Prisma).
+> **Estado:** en desarrollo (fase 3: autenticación y roles).
 > Proyecto de portafolio. Todos los datos de pruebas son **ficticios**.
 
 ## Funcionalidades
@@ -34,6 +34,7 @@ API REST para la gestión de una clínica con varios médicos: agenda de citas, 
 - **Framework web:** Express 5
 - **Base de datos:** PostgreSQL 18 (Docker)
 - **ORM:** Prisma 7 con el driver adapter de `pg`
+- **Autenticación:** JWT (jsonwebtoken) en cookies httpOnly, contraseñas hasheadas con bcrypt
 - **Validación:** Zod
 - **Calidad de código:** ESLint (typescript-eslint) y Prettier
 - **Por agregar:** Socket.IO, WhatsApp Cloud API, Vitest
@@ -91,9 +92,15 @@ Los valores de `POSTGRES_*` deben coincidir con el usuario, la contraseña y la 
 
 ## Endpoints
 
-| Método | Ruta      | Descripción                                                                                        |
-| ------ | --------- | -------------------------------------------------------------------------------------------------- |
-| `GET`  | `/health` | Estado de la API y de la conexión a la base de datos (`200` disponible, `503` base de datos caída) |
+| Método | Ruta             | Autenticación | Descripción                                                                                        |
+| ------ | ---------------- | ------------- | -------------------------------------------------------------------------------------------------- |
+| `GET`  | `/health`        | —             | Estado de la API y de la conexión a la base de datos (`200` disponible, `503` base de datos caída) |
+| `POST` | `/auth/register` | —             | Registra una cuenta de paciente (`201`; `409` si el email ya existe)                               |
+| `POST` | `/auth/login`    | —             | Inicia sesión y crea la cookie httpOnly `access_token` (válida por 1 hora)                         |
+| `POST` | `/auth/logout`   | —             | Borra la cookie de sesión (`204`)                                                                  |
+| `GET`  | `/auth/me`       | Cookie        | Devuelve el usuario autenticado (`401` sin una sesión válida)                                      |
+
+Los errores se devuelven como `{ "error": "mensaje" }`. Los errores de validación (`400`) incluyen además `details` con los mensajes de cada campo.
 
 ## Estructura del proyecto
 
@@ -112,12 +119,20 @@ src/
 ├── shared/
 │   ├── errors/            # clases de error propias
 │   └── middlewares/       # manejadores de 404 y de errores
+├── types/
+│   └── express.d.ts       # agrega `user` al tipo Request de Express
 └── modules/
+    ├── auth/
+    │   ├── auth.constants.ts
+    │   ├── auth.controller.ts
+    │   ├── auth.middleware.ts   # authenticate: valida la cookie de sesión
+    │   ├── auth.routes.ts
+    │   └── auth.service.ts      # reglas de negocio (hash, JWT)
     ├── health/
     │   └── health.routes.ts
     └── users/
         ├── users.controller.ts
-        ├── users.model.ts
+        ├── users.repository.ts  # acceso a la base de datos con Prisma
         ├── users.routes.ts
         ├── users.schema.ts
         └── users.types.ts
@@ -128,8 +143,8 @@ Cada módulo agrupa su schema de validación, tipos, acceso a datos, controlador
 ## Plan de desarrollo
 
 1. ~~Configuración base: TypeScript, linting, Express, manejo de errores y endpoint `/health`~~ ✅
-2. PostgreSQL con Docker y Prisma (en curso)
-3. Autenticación y roles
+2. ~~PostgreSQL con Docker y Prisma~~ ✅
+3. Autenticación y roles (en curso)
 4. Catálogos: médicos, servicios y horarios
 5. Citas y disponibilidad
 6. Expedientes clínicos y auditoría

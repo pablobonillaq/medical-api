@@ -4,7 +4,7 @@
 
 REST API for managing a multi-doctor clinic: appointment scheduling, electronic medical records, patient–clinic chat, and appointment reminders via WhatsApp.
 
-> **Status:** in development (phase 2: PostgreSQL database with Docker and Prisma).
+> **Status:** in development (phase 3: authentication and roles).
 > Portfolio project. All test data is **fictitious**.
 
 ## Features
@@ -34,6 +34,7 @@ REST API for managing a multi-doctor clinic: appointment scheduling, electronic 
 - **Web framework:** Express 5
 - **Database:** PostgreSQL 18 (Docker)
 - **ORM:** Prisma 7 with the `pg` driver adapter
+- **Authentication:** JWT (jsonwebtoken) in httpOnly cookies, passwords hashed with bcrypt
 - **Validation:** Zod
 - **Code quality:** ESLint (typescript-eslint) and Prettier
 - **Coming soon:** Socket.IO, WhatsApp Cloud API, Vitest
@@ -91,9 +92,15 @@ The `POSTGRES_*` values must match the user, password and database in `DATABASE_
 
 ## API endpoints
 
-| Method | Path      | Description                                                        |
-| ------ | --------- | ------------------------------------------------------------------ |
-| `GET`  | `/health` | API status and database connection (`200` up, `503` database down) |
+| Method | Path             | Auth   | Description                                                            |
+| ------ | ---------------- | ------ | ---------------------------------------------------------------------- |
+| `GET`  | `/health`        | —      | API status and database connection (`200` up, `503` database down)     |
+| `POST` | `/auth/register` | —      | Registers a patient account (`201`; `409` if the email already exists) |
+| `POST` | `/auth/login`    | —      | Logs in and sets the `access_token` httpOnly cookie (valid for 1 hour) |
+| `POST` | `/auth/logout`   | —      | Clears the session cookie (`204`)                                      |
+| `GET`  | `/auth/me`       | Cookie | Returns the authenticated user (`401` without a valid session)         |
+
+Errors are returned as `{ "error": "message" }`. Validation errors (`400`) also include `details` with the messages for each field.
 
 ## Project structure
 
@@ -112,12 +119,20 @@ src/
 ├── shared/
 │   ├── errors/            # custom error classes
 │   └── middlewares/       # 404 and error handlers
+├── types/
+│   └── express.d.ts       # adds `user` to the Express request type
 └── modules/
+    ├── auth/
+    │   ├── auth.constants.ts
+    │   ├── auth.controller.ts
+    │   ├── auth.middleware.ts   # authenticate: validates the session cookie
+    │   ├── auth.routes.ts
+    │   └── auth.service.ts      # business rules (hashing, JWT)
     ├── health/
     │   └── health.routes.ts
     └── users/
         ├── users.controller.ts
-        ├── users.model.ts
+        ├── users.repository.ts  # database access with Prisma
         ├── users.routes.ts
         ├── users.schema.ts
         └── users.types.ts
@@ -128,8 +143,8 @@ Each module groups its validation schema, types, data access, controller and rou
 ## Roadmap
 
 1. ~~Base setup: TypeScript, linting, Express, error handling and `/health` endpoint~~ ✅
-2. PostgreSQL with Docker and Prisma (in progress)
-3. Authentication and roles
+2. ~~PostgreSQL with Docker and Prisma~~ ✅
+3. Authentication and roles (in progress)
 4. Catalogs: doctors, services and schedules
 5. Appointments and availability
 6. Medical records and audit log

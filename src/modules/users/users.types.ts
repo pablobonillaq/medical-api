@@ -1,12 +1,5 @@
-import type { Role } from './users.schema.js'
+import type { User } from '../../generated/prisma/client.js'
 
-export interface User {
-  id: string
-  email: string
-  passwordHash: string
-  role: Role
-  active: boolean
-  createdAt: Date
-}
+export type PublicUser = Omit<User, 'passwordHash'>
 
-export type PublicUser = Omit<User, 'passwordHash'> // lo que sí se devuelve al cliente
+export const toPublicUser = ({ passwordHash: _passwordHash, ...user }: User): PublicUser => user
