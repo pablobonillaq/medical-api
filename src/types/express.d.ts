@@ -1,9 +1,9 @@
-import type { AuthUser } from '../modules/auth/auth.service.js'
+import type { PublicUser } from '../modules/users/users.types.js'
 
 declare global {
   namespace Express {
     interface Request {
-      user?: AuthUser
+      user?: PublicUser
     }
   }
 }

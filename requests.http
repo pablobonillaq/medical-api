@@ -48,3 +48,60 @@ POST http://localhost:3000/auth/logout
 
 ### Después del logout → 401
 GET http://localhost:3000/auth/me
+
+### 1. Login como admin
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{ "email": "admin@clinica.test", "password": "una-contraseña-larga-de-12-o-mas" }
+
+### 2. Crear un médico → 201
+POST http://localhost:3000/users
+Content-Type: application/json
+
+{ "email": "dra.garay@clinica.test", "password": "12345678", "role": "doctor" }
+
+### 3. Intentar crear un paciente desde aquí → 400 (Invalid role)
+POST http://localhost:3000/users
+Content-Type: application/json
+
+{ "email": "otro@test.com", "password": "12345678", "role": "patient" }
+
+### 4. Listar todos / solo médicos → 200
+GET http://localhost:3000/users
+
+###
+GET http://localhost:3000/users?role=doctor
+
+### 5. Desactivar al médico → 200 (copia su id de la respuesta 2)
+PATCH http://localhost:3000/users/01a18450-384b-70d7-93b4-88c288d07375
+Content-Type: application/json
+
+{ "active": false }
+
+### 6. PATCH vacío → 400 con formErrors
+PATCH http://localhost:3000/users/01a18450-384b-70d7-93b4-88c288d07375
+Content-Type: application/json
+
+{}
+
+### 7. Id inválido → 400
+PATCH http://localhost:3000/users/123
+Content-Type: application/json
+
+{ "active": true }
+
+### 8. Login del médico desactivado → 403 (Account is disabled)
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{ "email": "dra.garay@clinica.test", "password": "12345678" }
+
+### 9. Login como paciente y probar /users → 403
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{ "email": "paciente@test.com", "password": "12345678" }
+
+###
+GET http://localhost:3000/users

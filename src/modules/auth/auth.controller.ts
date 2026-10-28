@@ -28,10 +28,9 @@ const logout: RequestHandler = (_req, res) => {
   res.clearCookie(ACCESS_TOKEN_COOKIE, cookieOptions).status(204).end()
 }
 
-const me: RequestHandler = async (req, res) => {
+const me: RequestHandler = (req, res) => {
   if (!req.user) throw new UnauthorizedError()
-  const user = await authService.getCurrentUser(req.user.id)
-  res.json({ user })
+  res.json({ user: req.user })
 }
 
 export const authController = { register, login, logout, me }

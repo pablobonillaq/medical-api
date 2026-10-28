@@ -4,16 +4,11 @@ import { z } from 'zod'
 import { env } from '../../config/env.js'
 import { ConflictError, ForbiddenError, UnauthorizedError } from '../../shared/errors/app-error.js'
 import { usersRepository } from '../users/users.repository.js'
-import { roleSchema, type LoginInput, type RegisterPatientInput, type Role } from '../users/users.schema.js'
+   import type { LoginInput, RegisterPatientInput } from '../users/users.schema.js'
 import { toPublicUser } from '../users/users.types.js'
 import { SALT_ROUNDS, TOKEN_TTL } from './auth.constants.js'
 
-export interface AuthUser {
-  id: string
-  role: Role
-}
-
-const tokenPayloadSchema = z.object({ sub: z.uuid(), role: roleSchema })
+const tokenPayloadSchema = z.object({ sub: z.uuid() })
 
 export const authService = {
   async registerPatient({ email, password }: RegisterPatientInput) {
@@ -31,23 +26,20 @@ export const authService = {
     if (!user || !isValid) throw new UnauthorizedError('Invalid email or password')
     if (!user.active) throw new ForbiddenError('Account is disabled')
 
-    const token = jwt.sign({ role: user.role }, env.JWT_SECRET, {
-      subject: user.id,
-      expiresIn: TOKEN_TTL,
-    })
+    const token = jwt.sign({}, env.JWT_SECRET, { subject: user.id, expiresIn: TOKEN_TTL })
     return { user: toPublicUser(user), token }
   },
 
-  verifyToken(token: string): AuthUser {
-    try {
-      const payload = tokenPayloadSchema.parse(jwt.verify(token, env.JWT_SECRET))
-      return { id: payload.sub, role: payload.role }
-    } catch {
-      throw new UnauthorizedError('Invalid or expired session')
-    }
-  },
+     verifyToken(token: string): string {
+     try {
+       const payload = tokenPayloadSchema.parse(jwt.verify(token, env.JWT_SECRET))
+       return payload.sub
+     } catch {
+       throw new UnauthorizedError('Invalid or expired session')
+     }
+   },
 
-  async getCurrentUser(id: string) {
+  async getActiveUser(id: string) {
     const user = await usersRepository.findById(id)
     if (!user?.active) throw new UnauthorizedError('Invalid or expired session')
     return toPublicUser(user)

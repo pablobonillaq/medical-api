@@ -14,7 +14,7 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   }
 
   if (err instanceof z.ZodError) {
-    res.status(400).json({ error: 'Invalid request data', details: z.flattenError(err).fieldErrors })
+    res.status(400).json({ error: 'Invalid request data', details: z.flattenError(err) })    
     return
   }
 
