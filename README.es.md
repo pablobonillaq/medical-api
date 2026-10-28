@@ -4,12 +4,12 @@
 
 API REST para la gestión de una clínica con varios médicos: agenda de citas, expedientes clínicos, chat entre pacientes y clínica, y recordatorios de citas por WhatsApp.
 
-> **Estado:** en desarrollo (fase 3: autenticación y roles).
+> **Estado:** en desarrollo. Fases 1–3 completadas (configuración base, base de datos, autenticación y roles); sigue la fase 4, catálogos.
 > Proyecto de portafolio. Todos los datos de pruebas son **ficticios**.
 
 ## Funcionalidades
 
-- [ ] Autenticación con JWT en cookies y control de acceso por roles
+- [x] Autenticación con JWT en cookies y control de acceso por roles
 - [ ] Gestión de médicos, servicios, horarios y días no laborables
 - [ ] Agenda de citas: disponibilidad, agendar, cancelar y reprogramar, sin doble agendado
 - [ ] Expediente clínico: antecedentes y notas clínicas que no se editan ni se borran
@@ -54,6 +54,7 @@ npm install            # también genera el cliente de Prisma
 cp .env.example .env   # y completa los valores
 npm run db:up          # levanta PostgreSQL en Docker
 npm run db:migrate     # aplica las migraciones
+npm run db:seed        # crea la primera cuenta de admin (ADMIN_EMAIL / ADMIN_PASSWORD)
 npm run dev
 ```
 
@@ -63,44 +64,54 @@ Comprueba que todo funciona en `GET http://localhost:3000/health`.
 
 ## Variables de entorno
 
-| Variable            | Descripción                                   | Ejemplo                                                                 |
-| ------------------- | --------------------------------------------- | ----------------------------------------------------------------------- |
-| `NODE_ENV`          | Entorno: `development`, `test` o `production` | `development`                                                           |
-| `PORT`              | Puerto en el que corre la API                 | `3000`                                                                  |
-| `POSTGRES_USER`     | Usuario de PostgreSQL que crea Docker         | `medical`                                                               |
-| `POSTGRES_PASSWORD` | Contraseña de PostgreSQL que crea Docker      | `medical`                                                               |
-| `POSTGRES_DB`       | Base de datos que crea Docker                 | `medical_api`                                                           |
-| `DATABASE_URL`      | Cadena de conexión que usan Prisma y la API   | `postgresql://medical:medical@localhost:5433/medical_api?schema=public` |
-| `JWT_SECRET`        | Clave para firmar los tokens JWT              | una cadena larga y aleatoria                                            |
+| Variable            | Descripción                                              | Ejemplo                                                                 |
+| ------------------- | -------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `NODE_ENV`          | Entorno: `development`, `test` o `production`            | `development`                                                           |
+| `PORT`              | Puerto en el que corre la API                            | `3000`                                                                  |
+| `POSTGRES_USER`     | Usuario de PostgreSQL que crea Docker                    | `medical`                                                               |
+| `POSTGRES_PASSWORD` | Contraseña de PostgreSQL que crea Docker                 | `medical`                                                               |
+| `POSTGRES_DB`       | Base de datos que crea Docker                            | `medical_api`                                                           |
+| `DATABASE_URL`      | Cadena de conexión que usan Prisma y la API              | `postgresql://medical:medical@localhost:5433/medical_api?schema=public` |
+| `JWT_SECRET`        | Clave para firmar los tokens JWT                         | una cadena larga y aleatoria                                            |
+| `ADMIN_EMAIL`       | Email de la primera cuenta de admin que crea el seed     | `admin@clinica.test`                                                    |
+| `ADMIN_PASSWORD`    | Contraseña de esa cuenta de admin (mínimo 12 caracteres) | una contraseña larga                                                    |
 
-Los valores de `POSTGRES_*` deben coincidir con el usuario, la contraseña y la base de datos de `DATABASE_URL`.
+Los valores de `POSTGRES_*` deben coincidir con el usuario, la contraseña y la base de datos de `DATABASE_URL`. Las variables `ADMIN_*` solo las usa `npm run db:seed`.
 
 ## Scripts
 
-| Comando               | Descripción                                                  |
-| --------------------- | ------------------------------------------------------------ |
-| `npm run dev`         | Inicia el servidor en modo desarrollo con recarga automática |
-| `npm run typecheck`   | Verifica los tipos con TypeScript                            |
-| `npm run lint`        | Revisa el código con ESLint                                  |
-| `npm run format`      | Formatea el código con Prettier                              |
-| `npm run check`       | Ejecuta typecheck, lint y la revisión de formato             |
-| `npm run db:up`       | Levanta el contenedor de PostgreSQL                          |
-| `npm run db:down`     | Detiene el contenedor de PostgreSQL (los datos se conservan) |
-| `npm run db:migrate`  | Crea y aplica migraciones a partir del schema de Prisma      |
-| `npm run db:generate` | Genera el cliente de Prisma                                  |
-| `npm run db:studio`   | Abre Prisma Studio para ver los datos                        |
+| Comando               | Descripción                                                      |
+| --------------------- | ---------------------------------------------------------------- |
+| `npm run dev`         | Inicia el servidor en modo desarrollo con recarga automática     |
+| `npm run typecheck`   | Verifica los tipos con TypeScript                                |
+| `npm run lint`        | Revisa el código con ESLint                                      |
+| `npm run format`      | Formatea el código con Prettier                                  |
+| `npm run check`       | Ejecuta typecheck, lint y la revisión de formato                 |
+| `npm run db:up`       | Levanta el contenedor de PostgreSQL                              |
+| `npm run db:down`     | Detiene el contenedor de PostgreSQL (los datos se conservan)     |
+| `npm run db:migrate`  | Crea y aplica migraciones a partir del schema de Prisma          |
+| `npm run db:generate` | Genera el cliente de Prisma                                      |
+| `npm run db:studio`   | Abre Prisma Studio para ver los datos                            |
+| `npm run db:seed`     | Crea la primera cuenta de admin (se puede ejecutar varias veces) |
 
 ## Endpoints
 
-| Método | Ruta             | Autenticación | Descripción                                                                                        |
-| ------ | ---------------- | ------------- | -------------------------------------------------------------------------------------------------- |
-| `GET`  | `/health`        | —             | Estado de la API y de la conexión a la base de datos (`200` disponible, `503` base de datos caída) |
-| `POST` | `/auth/register` | —             | Registra una cuenta de paciente (`201`; `409` si el email ya existe)                               |
-| `POST` | `/auth/login`    | —             | Inicia sesión y crea la cookie httpOnly `access_token` (válida por 1 hora)                         |
-| `POST` | `/auth/logout`   | —             | Borra la cookie de sesión (`204`)                                                                  |
-| `GET`  | `/auth/me`       | Cookie        | Devuelve el usuario autenticado (`401` sin una sesión válida)                                      |
+Acceso: **Público** (sin sesión), **Autenticado** (cualquier usuario con sesión), **Admin** (solo `admin`).
 
-Los errores se devuelven como `{ "error": "mensaje" }`. Los errores de validación (`400`) incluyen además `details` con los mensajes de cada campo.
+| Método  | Ruta             | Acceso      | Descripción                                                                                                                                         |
+| ------- | ---------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`   | `/health`        | Público     | Estado de la API y de la conexión a la base de datos (`200` disponible, `503` base de datos caída)                                                  |
+| `POST`  | `/auth/register` | Público     | Registra una cuenta de paciente (`201`; `409` si el email ya existe)                                                                                |
+| `POST`  | `/auth/login`    | Público     | Inicia sesión y crea la cookie httpOnly `access_token` (válida por 1 hora); `403` si la cuenta está desactivada                                     |
+| `POST`  | `/auth/logout`   | Público     | Borra la cookie de sesión (`204`)                                                                                                                   |
+| `GET`   | `/auth/me`       | Autenticado | Devuelve el usuario autenticado                                                                                                                     |
+| `POST`  | `/users`         | Admin       | Crea una cuenta de personal (`admin`, `doctor` o `employee`)                                                                                        |
+| `GET`   | `/users`         | Admin       | Lista usuarios; filtro opcional `?role=doctor`                                                                                                      |
+| `PATCH` | `/users/:id`     | Admin       | Cambia el rol y/o el estado `active` de un usuario. Un admin no puede modificar su propia cuenta y las cuentas de paciente no pueden cambiar de rol |
+
+Las peticiones sin una sesión válida responden `401`; las de un rol sin permiso responden `403`. Una cuenta desactivada pierde el acceso de inmediato.
+
+Los errores se devuelven como `{ "error": "mensaje" }`. Los errores de validación (`400`) incluyen además `details` con `fieldErrors` (mensajes de cada campo) y `formErrors` (errores de la petición en conjunto).
 
 ## Estructura del proyecto
 
@@ -114,7 +125,8 @@ src/
 ├── config/
 │   └── env.ts             # variables de entorno validadas con Zod
 ├── db/
-│   └── prisma.ts          # instancia del cliente de Prisma
+│   ├── prisma.ts          # instancia del cliente de Prisma
+│   └── seed.ts            # crea la primera cuenta de admin
 ├── generated/             # cliente de Prisma generado (no se sube a git)
 ├── shared/
 │   ├── errors/            # clases de error propias
@@ -125,7 +137,7 @@ src/
     ├── auth/
     │   ├── auth.constants.ts
     │   ├── auth.controller.ts
-    │   ├── auth.middleware.ts   # authenticate: valida la cookie de sesión
+    │   ├── auth.middleware.ts   # authenticate (sesión) y requireRole (permisos)
     │   ├── auth.routes.ts
     │   └── auth.service.ts      # reglas de negocio (hash, JWT)
     ├── health/
@@ -135,6 +147,7 @@ src/
         ├── users.repository.ts  # acceso a la base de datos con Prisma
         ├── users.routes.ts
         ├── users.schema.ts
+        ├── users.service.ts     # reglas de negocio de la gestión de usuarios
         └── users.types.ts
 ```
 
@@ -144,7 +157,7 @@ Cada módulo agrupa su schema de validación, tipos, acceso a datos, controlador
 
 1. ~~Configuración base: TypeScript, linting, Express, manejo de errores y endpoint `/health`~~ ✅
 2. ~~PostgreSQL con Docker y Prisma~~ ✅
-3. Autenticación y roles (en curso)
+3. ~~Autenticación y roles~~ ✅
 4. Catálogos: médicos, servicios y horarios
 5. Citas y disponibilidad
 6. Expedientes clínicos y auditoría
