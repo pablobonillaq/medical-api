@@ -4,6 +4,7 @@ import { errorHandler, notFoundHandler } from './shared/middlewares/error-handle
 import cookieParser from 'cookie-parser'
 import { authRouter } from './modules/auth/auth.routes.js'
 import { usersRouter } from './modules/users/users.routes.js'
+import { servicesRouter } from './modules/services/services.routes.js'
 
 export const createApp = () => {
   const app = express()
@@ -15,6 +16,7 @@ export const createApp = () => {
   app.use('/health', healthRouter)
   app.use('/auth', authRouter)
   app.use('/users', usersRouter)
+  app.use('/services', servicesRouter)
 
   app.use(notFoundHandler)
   app.use(errorHandler)

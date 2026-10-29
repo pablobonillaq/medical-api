@@ -28,5 +28,77 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
+  doctor Doctor?
   @@map("users")
+}
+
+model Doctor {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  userId        String   @unique @map("user_id") @db.Uuid
+  firstName     String   @map("first_name")
+  lastName      String   @map("last_name")
+  specialty     String
+  licenseNumber String   @unique @map("license_number")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user     User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  services DoctorService[]
+  schedule ScheduleBlock[]
+  timeOff  TimeOff[]
+
+  @@map("doctors")
+}
+
+model Service {
+  id              String   @id @default(uuid(7)) @db.Uuid
+  name            String   @unique
+  description     String?
+  durationMinutes Int      @map("duration_minutes")
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  doctors DoctorService[]
+
+  @@map("services")
+}
+
+model DoctorService {
+  doctorId  String @map("doctor_id") @db.Uuid
+  serviceId String @map("service_id") @db.Uuid
+
+  doctor  Doctor  @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+
+  @@id([doctorId, serviceId])
+  @@index([serviceId])
+  @@map("doctor_services")
+}
+
+model ScheduleBlock {
+  id          String @id @default(uuid(7)) @db.Uuid
+  doctorId    String @map("doctor_id") @db.Uuid
+  dayOfWeek   Int    @map("day_of_week")
+  startMinute Int    @map("start_minute")
+  endMinute   Int    @map("end_minute")
+
+  doctor Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@index([doctorId, dayOfWeek])
+  @@map("schedule_blocks")
+}
+
+model TimeOff {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  doctorId  String   @map("doctor_id") @db.Uuid
+  startsAt  DateTime @map("starts_at") @db.Timestamptz(3)
+  endsAt    DateTime @map("ends_at") @db.Timestamptz(3)
+  reason    String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  doctor Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@index([doctorId, startsAt])
+  @@map("time_off")
 }

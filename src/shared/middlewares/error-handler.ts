@@ -23,9 +23,15 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
     return
   }
 
-  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-    res.status(409).json({ error: 'Resource already exists' })
-    return
+  if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    if (err.code === 'P2002') {
+      res.status(409).json({ error: 'Resource already exists' })
+      return
+    }
+    if (err.code === 'P2025') {
+      res.status(404).json({ error: 'Resource not found' })
+      return
+    }
   }
 
   console.error(err)

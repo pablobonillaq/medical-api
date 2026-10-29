@@ -1,107 +1,257 @@
-### Health
-GET http://localhost:3000/health
+# =============================================================================
+# Medical API — manual requests (VS Code REST Client)
+# Medical API — peticiones manuales (VS Code REST Client)
+#
+# EN: Run the requests in order. Cookies are kept between requests, so each
+#     login applies to the requests that follow it. Credentials are read from
+#     .env with {{$dotenv ...}}; never write real passwords in this file.
+# ES: Ejecuta las peticiones en orden. Las cookies se conservan entre peticiones,
+#     así que cada login aplica a las peticiones siguientes. Las credenciales se
+#     leen del .env con {{$dotenv ...}}; nunca escribas contraseñas reales aquí.
+# =============================================================================
 
-### Ruta inexistente → 404
-GET http://localhost:3000/no-existe
+@baseUrl = http://localhost:{{$dotenv PORT}}
+@adminEmail = {{$dotenv ADMIN_EMAIL}}
+@adminPassword = {{$dotenv ADMIN_PASSWORD}}
 
-### Registro de paciente → 201
-POST http://localhost:3000/auth/register
+# Fictitious test data / Datos de prueba ficticios
+@patientEmail = paciente@test.com
+@patientPassword = 12345678
+@doctorEmail = dra.garay@clinica.test
+@doctorPassword = 12345678
+
+
+# =============================================================================
+# Health / Estado
+# =============================================================================
+
+### Health check → 200
+# Estado de la API y de la base de datos → 200
+GET {{baseUrl}}/health
+
+### Unknown route → 404
+# Ruta inexistente → 404
+GET {{baseUrl}}/does-not-exist
+
+
+# =============================================================================
+# Auth / Autenticación
+# =============================================================================
+
+### Register a patient → 201
+# Registro de paciente → 201
+POST {{baseUrl}}/auth/register
 Content-Type: application/json
 
-{ "email": "paciente@test.com", "password": "12345678" }
+{ "email": "{{patientEmail}}", "password": "{{patientPassword}}" }
 
-### Mismo email → 409
-POST http://localhost:3000/auth/register
+### Same email again → 409
+# Mismo email otra vez → 409
+POST {{baseUrl}}/auth/register
 Content-Type: application/json
 
-{ "email": "paciente@test.com", "password": "12345678" }
+{ "email": "{{patientEmail}}", "password": "{{patientPassword}}" }
 
-### Datos inválidos → 400 con detalle por campo
-POST http://localhost:3000/auth/register
+### Invalid data → 400 with details per field
+# Datos inválidos → 400 con detalle por campo
+POST {{baseUrl}}/auth/register
 Content-Type: application/json
 
-{ "email": "no-es-email", "password": "123" }
+{ "email": "not-an-email", "password": "123" }
 
-### Intento de registrarse como admin → 201, pero con role "patient"
-POST http://localhost:3000/auth/register
+### Trying to register as admin → 201, but role is "patient"
+# Intento de registrarse como admin → 201, pero con role "patient"
+POST {{baseUrl}}/auth/register
 Content-Type: application/json
 
 { "email": "hacker@test.com", "password": "12345678", "role": "admin" }
 
-### Contraseña incorrecta → 401
-POST http://localhost:3000/auth/login
+### Wrong password → 401
+# Contraseña incorrecta → 401
+POST {{baseUrl}}/auth/login
 Content-Type: application/json
 
-{ "email": "paciente@test.com", "password": "incorrecta" }
+{ "email": "{{patientEmail}}", "password": "wrong-password" }
 
-### Login correcto → 200 y cookie access_token
-POST http://localhost:3000/auth/login
+### Patient login → 200 and access_token cookie
+# Login de paciente → 200 y cookie access_token
+POST {{baseUrl}}/auth/login
 Content-Type: application/json
 
-{ "email": "paciente@test.com", "password": "12345678" }
+{ "email": "{{patientEmail}}", "password": "{{patientPassword}}" }
 
-### Usuario actual (usa la cookie del login) → 200
-GET http://localhost:3000/auth/me
+### Current user (uses the login cookie) → 200
+# Usuario actual (usa la cookie del login) → 200
+GET {{baseUrl}}/auth/me
 
 ### Logout → 204
-POST http://localhost:3000/auth/logout
+# Cerrar sesión → 204
+POST {{baseUrl}}/auth/logout
 
-### Después del logout → 401
-GET http://localhost:3000/auth/me
+### After logout → 401
+# Después de cerrar sesión → 401
+GET {{baseUrl}}/auth/me
 
-### 1. Login como admin
-POST http://localhost:3000/auth/login
+
+# =============================================================================
+# Users (admin) / Usuarios (admin)
+# =============================================================================
+
+### Admin login → 200
+# Login como admin → 200
+POST {{baseUrl}}/auth/login
 Content-Type: application/json
 
-{ "email": "admin@clinica.test", "password": "una-contraseña-larga-de-12-o-mas" }
+{ "email": "{{adminEmail}}", "password": "{{adminPassword}}" }
 
-### 2. Crear un médico → 201
-POST http://localhost:3000/users
+### Create a doctor account → 201 (409 if it already exists)
+# Crear una cuenta de médico → 201 (409 si ya existe)
+# @name createDoctor
+POST {{baseUrl}}/users
 Content-Type: application/json
 
-{ "email": "dra.garay@clinica.test", "password": "12345678", "role": "doctor" }
+{ "email": "{{doctorEmail}}", "password": "{{doctorPassword}}", "role": "doctor" }
 
-### 3. Intentar crear un paciente desde aquí → 400 (Invalid role)
-POST http://localhost:3000/users
+### Try to create a patient from here → 400 (Invalid role)
+# Intentar crear un paciente desde aquí → 400 (Invalid role)
+POST {{baseUrl}}/users
 Content-Type: application/json
 
-{ "email": "otro@test.com", "password": "12345678", "role": "patient" }
+{ "email": "other@test.com", "password": "12345678", "role": "patient" }
 
-### 4. Listar todos / solo médicos → 200
-GET http://localhost:3000/users
+### List all users → 200
+# Listar todos los usuarios → 200
+GET {{baseUrl}}/users
 
-###
-GET http://localhost:3000/users?role=doctor
+### List doctors only → 200
+# Listar solo médicos → 200
+GET {{baseUrl}}/users?role=doctor
 
-### 5. Desactivar al médico → 200 (copia su id de la respuesta 2)
-PATCH http://localhost:3000/users/01a18450-384b-70d7-93b4-88c288d07375
+### Disable the doctor → 200 (uses the id from "createDoctor")
+# Desactivar al médico → 200 (usa el id de "createDoctor")
+PATCH {{baseUrl}}/users/{{createDoctor.response.body.$.user.id}}
 Content-Type: application/json
 
 { "active": false }
 
-### 6. PATCH vacío → 400 con formErrors
-PATCH http://localhost:3000/users/01a18450-384b-70d7-93b4-88c288d07375
+### Empty PATCH → 400 with formErrors
+# PATCH vacío → 400 con formErrors
+PATCH {{baseUrl}}/users/{{createDoctor.response.body.$.user.id}}
 Content-Type: application/json
 
 {}
 
-### 7. Id inválido → 400
-PATCH http://localhost:3000/users/123
+### Invalid id → 400
+# Id inválido → 400
+PATCH {{baseUrl}}/users/123
 Content-Type: application/json
 
 { "active": true }
 
-### 8. Login del médico desactivado → 403 (Account is disabled)
-POST http://localhost:3000/auth/login
+### Disabled doctor tries to log in → 403 (Account is disabled)
+# El médico desactivado intenta iniciar sesión → 403 (Account is disabled)
+POST {{baseUrl}}/auth/login
 Content-Type: application/json
 
-{ "email": "dra.garay@clinica.test", "password": "12345678" }
+{ "email": "{{doctorEmail}}", "password": "{{doctorPassword}}" }
 
-### 9. Login como paciente y probar /users → 403
-POST http://localhost:3000/auth/login
+
+# =============================================================================
+# Services (admin) / Servicios (admin)
+# =============================================================================
+
+### Admin login → 200
+# Login como admin → 200
+POST {{baseUrl}}/auth/login
 Content-Type: application/json
 
-{ "email": "paciente@test.com", "password": "12345678" }
+{ "email": "{{adminEmail}}", "password": "{{adminPassword}}" }
 
-###
-GET http://localhost:3000/users
+### Create a service → 201 (409 if the name already exists)
+# Crear un servicio → 201 (409 si el nombre ya existe)
+# @name createService
+POST {{baseUrl}}/services
+Content-Type: application/json
+
+{ "name": "Consulta general", "description": "Valoración médica general", "durationMinutes": 30 }
+
+### Create another service → 201
+# Crear otro servicio → 201
+POST {{baseUrl}}/services
+Content-Type: application/json
+
+{ "name": "Consulta de seguimiento", "durationMinutes": 20 }
+
+### Duplicate name → 409
+# Nombre repetido → 409
+POST {{baseUrl}}/services
+Content-Type: application/json
+
+{ "name": "Consulta general", "durationMinutes": 30 }
+
+### Invalid duration → 400 (not a multiple of 5)
+# Duración inválida → 400 (no es múltiplo de 5)
+POST {{baseUrl}}/services
+Content-Type: application/json
+
+{ "name": "Prueba", "durationMinutes": 37 }
+
+### List active services → 200 (sorted by name)
+# Listar servicios activos → 200 (ordenados por nombre)
+GET {{baseUrl}}/services
+
+### Disable a service → 200 (uses the id from "createService")
+# Desactivar un servicio → 200 (usa el id de "createService")
+PATCH {{baseUrl}}/services/{{createService.response.body.$.service.id}}
+Content-Type: application/json
+
+{ "active": false }
+
+### Disabled service no longer appears → 200
+# El servicio desactivado ya no aparece → 200
+GET {{baseUrl}}/services
+
+### Admin can still see inactive services → 200
+# El admin todavía puede ver los servicios inactivos → 200
+GET {{baseUrl}}/services?includeInactive=true
+
+### Re-enable the service → 200
+# Reactivar el servicio → 200
+PATCH {{baseUrl}}/services/{{createService.response.body.$.service.id}}
+Content-Type: application/json
+
+{ "active": true }
+
+### Service that does not exist → 404
+# Servicio que no existe → 404
+PATCH {{baseUrl}}/services/0190a7b2-0000-7000-8000-000000000000
+Content-Type: application/json
+
+{ "active": true }
+
+
+# =============================================================================
+# Permissions (patient) / Permisos (paciente)
+# =============================================================================
+
+### Patient login → 200
+# Login de paciente → 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "{{patientEmail}}", "password": "{{patientPassword}}" }
+
+### Patient lists users → 403
+# El paciente lista usuarios → 403
+GET {{baseUrl}}/users
+
+### Patient can read services → 200
+# El paciente puede ver los servicios → 200
+GET {{baseUrl}}/services
+
+### Patient tries to create a service → 403
+# El paciente intenta crear un servicio → 403
+POST {{baseUrl}}/services
+Content-Type: application/json
+
+{ "name": "Servicio no autorizado", "durationMinutes": 30 }
