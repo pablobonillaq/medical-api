@@ -4,7 +4,7 @@
 
 REST API for managing a multi-doctor clinic: appointment scheduling, electronic medical records, patient–clinic chat, and appointment reminders via WhatsApp.
 
-> **Status:** in development. Phases 1–3 completed (base setup, database, authentication and roles); next: phase 4, catalogs.
+> **Status:** in development. Phases 1–3 completed (base setup, database, authentication and roles). Phase 4 in progress: services and doctors are done; weekly schedules and days off are next.
 > Portfolio project. All test data is **fictitious**.
 
 ## Features
@@ -98,27 +98,68 @@ The `POSTGRES_*` values must match the user, password and database in `DATABASE_
 
 Access: **Public** (no session), **Authenticated** (any logged-in user), **Admin** (only `admin`).
 
-| Method  | Path             | Access        | Description                                                                                                                   |
-| ------- | ---------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `GET`   | `/health`        | Public        | API status and database connection (`200` up, `503` database down)                                                            |
-| `POST`  | `/auth/register` | Public        | Registers a patient account (`201`; `409` if the email already exists)                                                        |
-| `POST`  | `/auth/login`    | Public        | Logs in and sets the `access_token` httpOnly cookie (valid for 1 hour); `403` if the account is disabled                      |
-| `POST`  | `/auth/logout`   | Public        | Clears the session cookie (`204`)                                                                                             |
-| `GET`   | `/auth/me`       | Authenticated | Returns the authenticated user                                                                                                |
-| `POST`  | `/users`         | Admin         | Creates a staff account (`admin`, `doctor` or `employee`)                                                                     |
-| `GET`   | `/users`         | Admin         | Lists users; optional filter `?role=doctor`                                                                                   |
-| `PATCH` | `/users/:id`     | Admin         | Changes a user's role and/or `active` status. Admins cannot modify their own account, and patient accounts cannot change role |
+### Health and authentication
+
+| Method | Path             | Access        | Description                                                                                              |
+| ------ | ---------------- | ------------- | -------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/health`        | Public        | API status and database connection (`200` up, `503` database down)                                       |
+| `POST` | `/auth/register` | Public        | Registers a patient account (`201`; `409` if the email already exists)                                   |
+| `POST` | `/auth/login`    | Public        | Logs in and sets the `access_token` httpOnly cookie (valid for 1 hour); `403` if the account is disabled |
+| `POST` | `/auth/logout`   | Public        | Clears the session cookie (`204`)                                                                        |
+| `GET`  | `/auth/me`       | Authenticated | Returns the authenticated user                                                                           |
+
+### Users
+
+| Method  | Path         | Access | Description                                                                                                                                                 |
+| ------- | ------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST`  | `/users`     | Admin  | Creates an `admin` or `employee` account. Doctors are created from `/doctors`                                                                               |
+| `GET`   | `/users`     | Admin  | Lists users; optional filter `?role=doctor`                                                                                                                 |
+| `PATCH` | `/users/:id` | Admin  | Changes a user's role (`admin` ↔ `employee`) and/or `active` status. Admins cannot modify their own account; patient and doctor accounts cannot change role |
+
+### Services
+
+| Method  | Path            | Access        | Description                                                                                     |
+| ------- | --------------- | ------------- | ----------------------------------------------------------------------------------------------- |
+| `GET`   | `/services`     | Authenticated | Lists active services; admins can add `?includeInactive=true`                                   |
+| `GET`   | `/services/:id` | Authenticated | Returns a service                                                                               |
+| `POST`  | `/services`     | Admin         | Creates a service (duration between 5 and 480 minutes, multiple of 5; `409` if the name exists) |
+| `PATCH` | `/services/:id` | Admin         | Updates a service. Services are deactivated (`active: false`), never deleted                    |
+
+### Doctors
+
+| Method  | Path                    | Access        | Description                                                                                                         |
+| ------- | ----------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `GET`   | `/doctors`              | Authenticated | Lists active doctors with their services; filter `?serviceId=` and, for admins, `?includeInactive=true`             |
+| `GET`   | `/doctors/:id`          | Authenticated | Returns a doctor (inactive doctors are only visible to admins)                                                      |
+| `POST`  | `/doctors`              | Admin         | Creates the doctor's user account and profile in a single transaction (`409` if the email or license number exists) |
+| `PATCH` | `/doctors/:id`          | Admin         | Updates the doctor's profile (name, specialty, license number)                                                      |
+| `PUT`   | `/doctors/:id/services` | Admin         | Replaces the list of services the doctor offers (`{ "serviceIds": [...] }`)                                         |
+
+To enable or disable a doctor, use `PATCH /users/:userId` with `{ "active": false }`.
 
 Requests without a valid session return `401`; requests from a role without permission return `403`. A disabled account loses access immediately.
 
 Errors are returned as `{ "error": "message" }`. Validation errors (`400`) also include `details` with `fieldErrors` (messages for each field) and `formErrors` (errors about the request as a whole).
+
+## Data model
+
+| Table             | Description                                                                                         |
+| ----------------- | --------------------------------------------------------------------------------------------------- |
+| `users`           | Accounts: email, password hash, role and `active` status                                            |
+| `doctors`         | Doctor profile (1:1 with `users`): name, specialty and unique license number                        |
+| `services`        | Services offered by the clinic, with their duration in minutes                                      |
+| `doctor_services` | Many-to-many relation: which services each doctor offers                                            |
+| `schedule_blocks` | Weekly schedule: day (1 = Monday … 7 = Sunday) and start/end in minutes since midnight, clinic time |
+| `time_off`        | Days off and absences of each doctor (exact start and end timestamps)                               |
+
+Besides the validation in the API, the database enforces its own rules with `CHECK` constraints (service durations, valid days and hours, time off ranges).
 
 ## Project structure
 
 ```
 prisma/
 ├── schema.prisma          # database models
-└── migrations/            # SQL migration history
+└── migrations/            # SQL migration history (including CHECK constraints)
 src/
 ├── index.ts               # starts the server and handles shutdown
 ├── app.ts                 # creates and configures the Express app
@@ -130,7 +171,9 @@ src/
 ├── generated/             # generated Prisma client (not committed)
 ├── shared/
 │   ├── errors/            # custom error classes
-│   └── middlewares/       # 404 and error handlers
+│   ├── middlewares/       # 404 and error handlers
+│   ├── schemas/           # shared Zod schemas (ids, PATCH helpers)
+│   └── utils/             # helpers such as omitUndefined
 ├── types/
 │   └── express.d.ts       # adds `user` to the Express request type
 └── modules/
@@ -140,8 +183,20 @@ src/
     │   ├── auth.middleware.ts   # authenticate (session) and requireRole (permissions)
     │   ├── auth.routes.ts
     │   └── auth.service.ts      # business rules (hashing, JWT)
+    ├── doctors/
+    │   ├── doctors.controller.ts
+    │   ├── doctors.repository.ts  # queries, nested writes and transactions
+    │   ├── doctors.routes.ts
+    │   ├── doctors.schema.ts
+    │   ├── doctors.service.ts     # business rules (unique email and license)
+    │   └── doctors.types.ts       # response mapping
     ├── health/
     │   └── health.routes.ts
+    ├── services/
+    │   ├── services.controller.ts
+    │   ├── services.repository.ts
+    │   ├── services.routes.ts
+    │   └── services.schema.ts
     └── users/
         ├── users.controller.ts
         ├── users.repository.ts  # database access with Prisma
@@ -158,7 +213,7 @@ Each module groups its validation schema, types, data access, controller and rou
 1. ~~Base setup: TypeScript, linting, Express, error handling and `/health` endpoint~~ ✅
 2. ~~PostgreSQL with Docker and Prisma~~ ✅
 3. ~~Authentication and roles~~ ✅
-4. Catalogs: doctors, services and schedules
+4. Catalogs: doctors, services and schedules (in progress)
 5. Appointments and availability
 6. Medical records and audit log
 7. Real-time chat

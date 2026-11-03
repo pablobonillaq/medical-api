@@ -17,6 +17,8 @@
 # Fictitious test data / Datos de prueba ficticios
 @patientEmail = paciente@test.com
 @patientPassword = 12345678
+@employeeEmail = recepcion@clinica.test
+@employeePassword = 12345678
 @doctorEmail = dra.garay@clinica.test
 @doctorPassword = 12345678
 
@@ -104,13 +106,20 @@ Content-Type: application/json
 
 { "email": "{{adminEmail}}", "password": "{{adminPassword}}" }
 
-### Create a doctor account → 201 (409 if it already exists)
-# Crear una cuenta de médico → 201 (409 si ya existe)
-# @name createDoctor
+### Create an employee account → 201 (409 if it already exists)
+# Crear una cuenta de empleado → 201 (409 si ya existe)
+# @name createEmployee
 POST {{baseUrl}}/users
 Content-Type: application/json
 
-{ "email": "{{doctorEmail}}", "password": "{{doctorPassword}}", "role": "doctor" }
+{ "email": "{{employeeEmail}}", "password": "{{employeePassword}}", "role": "employee" }
+
+### Try to create a doctor from here → 400 (doctors are created from /doctors)
+# Intentar crear un médico desde aquí → 400 (los médicos se crean desde /doctors)
+POST {{baseUrl}}/users
+Content-Type: application/json
+
+{ "email": "other.doctor@test.com", "password": "12345678", "role": "doctor" }
 
 ### Try to create a patient from here → 400 (Invalid role)
 # Intentar crear un paciente desde aquí → 400 (Invalid role)
@@ -123,20 +132,20 @@ Content-Type: application/json
 # Listar todos los usuarios → 200
 GET {{baseUrl}}/users
 
-### List doctors only → 200
-# Listar solo médicos → 200
-GET {{baseUrl}}/users?role=doctor
+### List employees only → 200
+# Listar solo empleados → 200
+GET {{baseUrl}}/users?role=employee
 
-### Disable the doctor → 200 (uses the id from "createDoctor")
-# Desactivar al médico → 200 (usa el id de "createDoctor")
-PATCH {{baseUrl}}/users/{{createDoctor.response.body.$.user.id}}
+### Disable the employee → 200 (uses the id from "createEmployee")
+# Desactivar al empleado → 200 (usa el id de "createEmployee")
+PATCH {{baseUrl}}/users/{{createEmployee.response.body.$.user.id}}
 Content-Type: application/json
 
 { "active": false }
 
 ### Empty PATCH → 400 with formErrors
 # PATCH vacío → 400 con formErrors
-PATCH {{baseUrl}}/users/{{createDoctor.response.body.$.user.id}}
+PATCH {{baseUrl}}/users/{{createEmployee.response.body.$.user.id}}
 Content-Type: application/json
 
 {}
@@ -148,12 +157,26 @@ Content-Type: application/json
 
 { "active": true }
 
-### Disabled doctor tries to log in → 403 (Account is disabled)
-# El médico desactivado intenta iniciar sesión → 403 (Account is disabled)
+### Disabled employee tries to log in → 403 (Account is disabled)
+# El empleado desactivado intenta iniciar sesión → 403 (Account is disabled)
 POST {{baseUrl}}/auth/login
 Content-Type: application/json
 
-{ "email": "{{doctorEmail}}", "password": "{{doctorPassword}}" }
+{ "email": "{{employeeEmail}}", "password": "{{employeePassword}}" }
+
+### Admin login again → 200
+# Login como admin otra vez → 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "{{adminEmail}}", "password": "{{adminPassword}}" }
+
+### Re-enable the employee → 200
+# Reactivar al empleado → 200
+PATCH {{baseUrl}}/users/{{createEmployee.response.body.$.user.id}}
+Content-Type: application/json
+
+{ "active": true }
 
 
 # =============================================================================
@@ -231,6 +254,128 @@ Content-Type: application/json
 
 
 # =============================================================================
+# Doctors (admin) / Médicos (admin)
+# Run "Create a service" in the Services section first.
+# Ejecuta antes "Create a service" de la sección Services.
+# =============================================================================
+
+### Admin login → 200
+# Login como admin → 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "{{adminEmail}}", "password": "{{adminPassword}}" }
+
+### Create a doctor (user + profile in one transaction) → 201 (409 if it already exists)
+# Crear un médico (usuario + perfil en una transacción) → 201 (409 si ya existe)
+# @name createDoctor
+POST {{baseUrl}}/doctors
+Content-Type: application/json
+
+{
+  "email": "{{doctorEmail}}",
+  "password": "{{doctorPassword}}",
+  "firstName": "Ana",
+  "lastName": "Garay",
+  "specialty": "Medicina general",
+  "licenseNumber": "12345678"
+}
+
+### Same license number → 409
+# Misma cédula → 409
+POST {{baseUrl}}/doctors
+Content-Type: application/json
+
+{
+  "email": "otro.medico@clinica.test",
+  "password": "12345678",
+  "firstName": "Luis",
+  "lastName": "Pérez",
+  "specialty": "Pediatría",
+  "licenseNumber": "12345678"
+}
+
+### Invalid license number → 400
+# Cédula inválida → 400
+POST {{baseUrl}}/doctors
+Content-Type: application/json
+
+{
+  "email": "otro.medico@clinica.test",
+  "password": "12345678",
+  "firstName": "Luis",
+  "lastName": "Pérez",
+  "specialty": "Pediatría",
+  "licenseNumber": "ABC123"
+}
+
+### Assign services to the doctor → 200
+# Asignar servicios al médico → 200
+PUT {{baseUrl}}/doctors/{{createDoctor.response.body.$.doctor.id}}/services
+Content-Type: application/json
+
+{ "serviceIds": ["{{createService.response.body.$.service.id}}"] }
+
+### Assign a service that does not exist → 400
+# Asignar un servicio que no existe → 400
+PUT {{baseUrl}}/doctors/{{createDoctor.response.body.$.doctor.id}}/services
+Content-Type: application/json
+
+{ "serviceIds": ["0190a7b2-0000-7000-8000-000000000000"] }
+
+### List doctors → 200
+# Listar médicos → 200
+GET {{baseUrl}}/doctors
+
+### Doctors who offer a service → 200
+# Médicos que ofrecen un servicio → 200
+GET {{baseUrl}}/doctors?serviceId={{createService.response.body.$.service.id}}
+
+### Get one doctor → 200
+# Ver un médico → 200
+GET {{baseUrl}}/doctors/{{createDoctor.response.body.$.doctor.id}}
+
+### Update the doctor's profile → 200
+# Actualizar el perfil del médico → 200
+PATCH {{baseUrl}}/doctors/{{createDoctor.response.body.$.doctor.id}}
+Content-Type: application/json
+
+{ "specialty": "Medicina familiar" }
+
+### Try to change a doctor's role → 400
+# Intentar cambiar el rol de un médico → 400
+PATCH {{baseUrl}}/users/{{createDoctor.response.body.$.doctor.userId}}
+Content-Type: application/json
+
+{ "role": "employee" }
+
+### Doctor login → 200
+# Login del médico → 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "{{doctorEmail}}", "password": "{{doctorPassword}}" }
+
+### Doctor can view doctors → 200
+# El médico puede ver los médicos → 200
+GET {{baseUrl}}/doctors
+
+### Doctor tries to create a doctor → 403
+# El médico intenta crear un médico → 403
+POST {{baseUrl}}/doctors
+Content-Type: application/json
+
+{
+  "email": "x@clinica.test",
+  "password": "12345678",
+  "firstName": "Xavier",
+  "lastName": "Yáñez",
+  "specialty": "Cardiología",
+  "licenseNumber": "1234567"
+}
+
+
+# =============================================================================
 # Permissions (patient) / Permisos (paciente)
 # =============================================================================
 
@@ -248,6 +393,10 @@ GET {{baseUrl}}/users
 ### Patient can read services → 200
 # El paciente puede ver los servicios → 200
 GET {{baseUrl}}/services
+
+### Patient can read doctors → 200
+# El paciente puede ver los médicos → 200
+GET {{baseUrl}}/doctors
 
 ### Patient tries to create a service → 403
 # El paciente intenta crear un servicio → 403
