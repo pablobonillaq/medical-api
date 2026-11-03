@@ -4,13 +4,14 @@
 
 API REST para la gestión de una clínica con varios médicos: agenda de citas, expedientes clínicos, chat entre pacientes y clínica, y recordatorios de citas por WhatsApp.
 
-> **Estado:** en desarrollo. Fases 1–4 completadas (configuración base, base de datos, autenticación y roles, catálogos); sigue la fase 5, citas y disponibilidad.
+> **Estado:** en desarrollo. Fases 1–4 completadas (configuración base, base de datos, autenticación y roles, catálogos). Fase 5 en curso: perfiles de pacientes terminados; siguen las citas y la disponibilidad.
 > Proyecto de portafolio. Todos los datos de pruebas son **ficticios**.
 
 ## Funcionalidades
 
 - [x] Autenticación con JWT en cookies y control de acceso por roles
 - [x] Gestión de médicos, servicios, horarios y días no laborables
+- [x] Perfiles de pacientes: registro propio o por recepción, búsqueda y paginación
 - [ ] Agenda de citas: disponibilidad, agendar, cancelar y reprogramar, sin doble agendado
 - [ ] Expediente clínico: antecedentes y notas clínicas que no se editan ni se borran
 - [ ] Registro de auditoría de cada acceso a expedientes
@@ -100,13 +101,13 @@ Acceso: **Público** (sin sesión), **Autenticado** (cualquier usuario con sesi�
 
 ### Estado y autenticación
 
-| Método | Ruta             | Acceso      | Descripción                                                                                                     |
-| ------ | ---------------- | ----------- | --------------------------------------------------------------------------------------------------------------- |
-| `GET`  | `/health`        | Público     | Estado de la API y de la conexión a la base de datos (`200` disponible, `503` base de datos caída)              |
-| `POST` | `/auth/register` | Público     | Registra una cuenta de paciente (`201`; `409` si el email ya existe)                                            |
-| `POST` | `/auth/login`    | Público     | Inicia sesión y crea la cookie httpOnly `access_token` (válida por 1 hora); `403` si la cuenta está desactivada |
-| `POST` | `/auth/logout`   | Público     | Borra la cookie de sesión (`204`)                                                                               |
-| `GET`  | `/auth/me`       | Autenticado | Devuelve el usuario autenticado                                                                                 |
+| Método | Ruta             | Acceso      | Descripción                                                                                                                                                                  |
+| ------ | ---------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/health`        | Público     | Estado de la API y de la conexión a la base de datos (`200` disponible, `503` base de datos caída)                                                                           |
+| `POST` | `/auth/register` | Público     | Registra un paciente: cuenta y perfil (`firstName`, `lastName`, `birthDate`, `phone`, `whatsappOptIn` opcional) en una sola transacción (`201`; `409` si el email ya existe) |
+| `POST` | `/auth/login`    | Público     | Inicia sesión y crea la cookie httpOnly `access_token` (válida por 1 hora); `403` si la cuenta está desactivada                                                              |
+| `POST` | `/auth/logout`   | Público     | Borra la cookie de sesión (`204`)                                                                                                                                            |
+| `GET`  | `/auth/me`       | Autenticado | Devuelve el usuario autenticado                                                                                                                                              |
 
 ### Usuarios
 
@@ -149,20 +150,33 @@ Para activar o desactivar a un médico se usa `PATCH /users/:userId` con `{ "act
 
 Los días van de `1` (lunes) a `7` (domingo). Las horas usan `HH:mm` en hora local de la clínica y deben ser múltiplos de 5 minutos. Un médico solo puede administrar su propio horario y sus días libres; los pacientes no ven los días libres porque el motivo puede ser privado.
 
+### Pacientes
+
+| Método  | Ruta            | Acceso                        | Descripción                                                                                                                                                                        |
+| ------- | --------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`   | `/patients/me`  | Paciente                      | Devuelve el perfil del propio paciente                                                                                                                                             |
+| `GET`   | `/patients`     | Admin o empleado              | Búsqueda paginada: `?search=` (nombre en cualquier orden, o 4 o más dígitos del teléfono), `?page=` y `?pageSize=` (máximo 100). Devuelve `patients`, `page`, `pageSize` y `total` |
+| `POST`  | `/patients`     | Admin o empleado              | Registra un paciente sin cuenta (por ejemplo, por teléfono)                                                                                                                        |
+| `GET`   | `/patients/:id` | Admin, empleado o el paciente | Devuelve un paciente. Para otros pacientes responde `404`, así no se revelan ids                                                                                                   |
+| `PATCH` | `/patients/:id` | Empleado o el paciente        | Actualiza el perfil. El admin no puede editar datos de pacientes                                                                                                                   |
+
+El teléfono se acepta como `55 1234 5678`, `(55) 1234-5678` o `+52…` y siempre se guarda en formato E.164 (`+525512345678`), como lo exige WhatsApp. `birthDate` usa `AAAA-MM-DD`. `whatsappOptIn` guarda el consentimiento del paciente para recibir recordatorios y por defecto es `false`.
+
 Las peticiones sin una sesión válida responden `401`; las de un rol sin permiso responden `403`. Una cuenta desactivada pierde el acceso de inmediato.
 
 Los errores se devuelven como `{ "error": "mensaje" }`. Los errores de validación (`400`) incluyen además `details` con `fieldErrors` (mensajes de cada campo) y `formErrors` (errores de la petición en conjunto).
 
 ## Modelo de datos
 
-| Tabla             | Descripción                                                                                                    |
-| ----------------- | -------------------------------------------------------------------------------------------------------------- |
-| `users`           | Cuentas: email, hash de la contraseña, rol y estado `active`                                                   |
-| `doctors`         | Perfil del médico (1:1 con `users`): nombre, especialidad y cédula profesional única                           |
-| `services`        | Servicios que ofrece la clínica, con su duración en minutos                                                    |
-| `doctor_services` | Relación muchos a muchos: qué servicios ofrece cada médico                                                     |
-| `schedule_blocks` | Horario semanal: día (1 = lunes … 7 = domingo) e inicio/fin en minutos desde la medianoche, hora de la clínica |
-| `time_off`        | Días libres y ausencias de cada médico (fecha y hora exactas de inicio y fin)                                  |
+| Tabla             | Descripción                                                                                                                       |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `users`           | Cuentas: email, hash de la contraseña, rol y estado `active`                                                                      |
+| `doctors`         | Perfil del médico (1:1 con `users`): nombre, especialidad y cédula profesional única                                              |
+| `services`        | Servicios que ofrece la clínica, con su duración en minutos                                                                       |
+| `doctor_services` | Relación muchos a muchos: qué servicios ofrece cada médico                                                                        |
+| `schedule_blocks` | Horario semanal: día (1 = lunes … 7 = domingo) e inicio/fin en minutos desde la medianoche, hora de la clínica                    |
+| `patients`        | Perfil del paciente: nombre, fecha de nacimiento, teléfono (E.164) y consentimiento de WhatsApp. La cuenta de usuario es opcional |
+| `time_off`        | Días libres y ausencias de cada médico (fecha y hora exactas de inicio y fin)                                                     |
 
 Además de la validación en la API, la base de datos aplica sus propias reglas con restricciones `CHECK` (duración de los servicios, días y horas válidos, rangos de días libres).
 
@@ -184,7 +198,7 @@ src/
 ├── shared/
 │   ├── errors/            # clases de error propias
 │   ├── middlewares/       # manejadores de 404 y de errores
-│   ├── schemas/           # schemas de Zod compartidos (ids, ayudas para PATCH)
+│   ├── schemas/           # schemas de Zod compartidos (ids, nombres, paginación, ayudas para PATCH)
 │   └── utils/             # utilidades como omitUndefined y conversión de horas (HH:mm ↔ minutos)
 ├── types/
 │   └── express.d.ts       # agrega `user` al tipo Request de Express
@@ -204,6 +218,13 @@ src/
     │   └── doctors.types.ts       # formato de la respuesta
     ├── health/
     │   └── health.routes.ts
+    ├── patients/
+    │   ├── patients.controller.ts
+    │   ├── patients.repository.ts   # búsqueda y paginación
+    │   ├── patients.routes.ts
+    │   ├── patients.schema.ts       # normalización del teléfono y fechas
+    │   ├── patients.service.ts      # reglas de acceso (personal o el propio paciente)
+    │   └── patients.types.ts
     ├── schedules/
     │   ├── schedules.controller.ts
     │   ├── schedules.repository.ts
@@ -232,7 +253,7 @@ Cada módulo agrupa su schema de validación, tipos, acceso a datos, controlador
 2. ~~PostgreSQL con Docker y Prisma~~ ✅
 3. ~~Autenticación y roles~~ ✅
 4. ~~Catálogos: médicos, servicios y horarios~~ ✅
-5. Citas y disponibilidad
+5. Citas y disponibilidad (en curso)
 6. Expedientes clínicos y auditoría
 7. Chat en tiempo real
 8. Recordatorios por WhatsApp

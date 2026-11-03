@@ -4,13 +4,14 @@
 
 REST API for managing a multi-doctor clinic: appointment scheduling, electronic medical records, patient–clinic chat, and appointment reminders via WhatsApp.
 
-> **Status:** in development. Phases 1–4 completed (base setup, database, authentication and roles, catalogs); next: phase 5, appointments and availability.
+> **Status:** in development. Phases 1–4 completed (base setup, database, authentication and roles, catalogs). Phase 5 in progress: patient profiles are done; appointments and availability are next.
 > Portfolio project. All test data is **fictitious**.
 
 ## Features
 
 - [x] JWT authentication with cookies and role-based access control
 - [x] Management of doctors, services, schedules and days off
+- [x] Patient profiles: self-registration or front-desk registration, search and pagination
 - [ ] Appointment scheduling: availability, booking, cancelling and rescheduling, with no double booking
 - [ ] Medical records: medical history and append-only clinical notes (never edited or deleted)
 - [ ] Audit log of every access to medical records
@@ -100,13 +101,13 @@ Access: **Public** (no session), **Authenticated** (any logged-in user), **Admin
 
 ### Health and authentication
 
-| Method | Path             | Access        | Description                                                                                              |
-| ------ | ---------------- | ------------- | -------------------------------------------------------------------------------------------------------- |
-| `GET`  | `/health`        | Public        | API status and database connection (`200` up, `503` database down)                                       |
-| `POST` | `/auth/register` | Public        | Registers a patient account (`201`; `409` if the email already exists)                                   |
-| `POST` | `/auth/login`    | Public        | Logs in and sets the `access_token` httpOnly cookie (valid for 1 hour); `403` if the account is disabled |
-| `POST` | `/auth/logout`   | Public        | Clears the session cookie (`204`)                                                                        |
-| `GET`  | `/auth/me`       | Authenticated | Returns the authenticated user                                                                           |
+| Method | Path             | Access        | Description                                                                                                                                                                      |
+| ------ | ---------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/health`        | Public        | API status and database connection (`200` up, `503` database down)                                                                                                               |
+| `POST` | `/auth/register` | Public        | Registers a patient: account and profile (`firstName`, `lastName`, `birthDate`, `phone`, optional `whatsappOptIn`) in one transaction (`201`; `409` if the email already exists) |
+| `POST` | `/auth/login`    | Public        | Logs in and sets the `access_token` httpOnly cookie (valid for 1 hour); `403` if the account is disabled                                                                         |
+| `POST` | `/auth/logout`   | Public        | Clears the session cookie (`204`)                                                                                                                                                |
+| `GET`  | `/auth/me`       | Authenticated | Returns the authenticated user                                                                                                                                                   |
 
 ### Users
 
@@ -149,6 +150,18 @@ To enable or disable a doctor, use `PATCH /users/:userId` with `{ "active": fals
 
 Days go from `1` (Monday) to `7` (Sunday). Times use `HH:mm` in the clinic's local time and must be multiples of 5 minutes. A doctor can only manage their own schedule and time off; patients cannot see time off because the reason may be private.
 
+### Patients
+
+| Method  | Path            | Access                         | Description                                                                                                                                                          |
+| ------- | --------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`   | `/patients/me`  | Patient                        | Returns the patient's own profile                                                                                                                                    |
+| `GET`   | `/patients`     | Admin or employee              | Paginated search: `?search=` (name in any order, or 4+ digits of the phone), `?page=` and `?pageSize=` (max 100). Returns `patients`, `page`, `pageSize` and `total` |
+| `POST`  | `/patients`     | Admin or employee              | Registers a patient without an account (e.g. by phone)                                                                                                               |
+| `GET`   | `/patients/:id` | Admin, employee or the patient | Returns a patient. Other patients get `404`, so ids are not revealed                                                                                                 |
+| `PATCH` | `/patients/:id` | Employee or the patient        | Updates the profile. Admins cannot edit patient data                                                                                                                 |
+
+Phones are accepted as `55 1234 5678`, `(55) 1234-5678` or `+52…` and always stored in E.164 format (`+525512345678`), as WhatsApp requires. `birthDate` uses `YYYY-MM-DD`. `whatsappOptIn` records the patient's consent to receive reminders and defaults to `false`.
+
 Requests without a valid session return `401`; requests from a role without permission return `403`. A disabled account loses access immediately.
 
 Errors are returned as `{ "error": "message" }`. Validation errors (`400`) also include `details` with `fieldErrors` (messages for each field) and `formErrors` (errors about the request as a whole).
@@ -162,6 +175,7 @@ Errors are returned as `{ "error": "message" }`. Validation errors (`400`) also 
 | `services`        | Services offered by the clinic, with their duration in minutes                                      |
 | `doctor_services` | Many-to-many relation: which services each doctor offers                                            |
 | `schedule_blocks` | Weekly schedule: day (1 = Monday … 7 = Sunday) and start/end in minutes since midnight, clinic time |
+| `patients`        | Patient profile: name, birth date, phone (E.164) and WhatsApp consent. The user account is optional |
 | `time_off`        | Days off and absences of each doctor (exact start and end timestamps)                               |
 
 Besides the validation in the API, the database enforces its own rules with `CHECK` constraints (service durations, valid days and hours, time off ranges).
@@ -184,7 +198,7 @@ src/
 ├── shared/
 │   ├── errors/            # custom error classes
 │   ├── middlewares/       # 404 and error handlers
-│   ├── schemas/           # shared Zod schemas (ids, PATCH helpers)
+│   ├── schemas/           # shared Zod schemas (ids, names, pagination, PATCH helpers)
 │   └── utils/             # helpers such as omitUndefined and time conversion (HH:mm ↔ minutes)
 ├── types/
 │   └── express.d.ts       # adds `user` to the Express request type
@@ -204,6 +218,13 @@ src/
     │   └── doctors.types.ts       # response mapping
     ├── health/
     │   └── health.routes.ts
+    ├── patients/
+    │   ├── patients.controller.ts
+    │   ├── patients.repository.ts   # search and pagination
+    │   ├── patients.routes.ts
+    │   ├── patients.schema.ts       # phone normalization and dates
+    │   ├── patients.service.ts      # access rules (staff or the patient)
+    │   └── patients.types.ts
     ├── schedules/
     │   ├── schedules.controller.ts
     │   ├── schedules.repository.ts
@@ -232,7 +253,7 @@ Each module groups its validation schema, types, data access, controller and rou
 2. ~~PostgreSQL with Docker and Prisma~~ ✅
 3. ~~Authentication and roles~~ ✅
 4. ~~Catalogs: doctors, services and schedules~~ ✅
-5. Appointments and availability
+5. Appointments and availability (in progress)
 6. Medical records and audit log
 7. Real-time chat
 8. WhatsApp reminders

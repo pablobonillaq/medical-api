@@ -42,33 +42,71 @@ GET {{baseUrl}}/does-not-exist
 # Auth / Autenticación
 # =============================================================================
 
-### Register a patient → 201
-# Registro de paciente → 201
+### Register a patient (account + profile) → 201, phone saved as +525512345678
+# Registro de paciente (cuenta + perfil) → 201, teléfono guardado como +525512345678
+# @name registerPatient
 POST {{baseUrl}}/auth/register
 Content-Type: application/json
 
-{ "email": "{{patientEmail}}", "password": "{{patientPassword}}" }
+{
+  "email": "{{patientEmail}}",
+  "password": "{{patientPassword}}",
+  "firstName": "Luz",
+  "lastName": "Méndez",
+  "birthDate": "1990-05-21",
+  "phone": "(55) 1234-5678",
+  "whatsappOptIn": true
+}
 
 ### Same email again → 409
 # Mismo email otra vez → 409
 POST {{baseUrl}}/auth/register
 Content-Type: application/json
 
-{ "email": "{{patientEmail}}", "password": "{{patientPassword}}" }
+{
+  "email": "{{patientEmail}}",
+  "password": "{{patientPassword}}",
+  "firstName": "Luz",
+  "lastName": "Méndez",
+  "birthDate": "1990-05-21",
+  "phone": "5512345678"
+}
+
+### Only email and password (old format) → 400, the profile is required
+# Solo email y contraseña (formato anterior) → 400, el perfil es obligatorio
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{ "email": "other.patient@test.com", "password": "12345678" }
 
 ### Invalid data → 400 with details per field
 # Datos inválidos → 400 con detalle por campo
 POST {{baseUrl}}/auth/register
 Content-Type: application/json
 
-{ "email": "not-an-email", "password": "123" }
+{
+  "email": "not-an-email",
+  "password": "123",
+  "firstName": "L",
+  "lastName": "M",
+  "birthDate": "21/05/1990",
+  "phone": "12345"
+}
 
 ### Trying to register as admin → 201, but role is "patient"
 # Intento de registrarse como admin → 201, pero con role "patient"
 POST {{baseUrl}}/auth/register
 Content-Type: application/json
 
-{ "email": "hacker@test.com", "password": "12345678", "role": "admin" }
+{
+  "email": "hacker@test.com",
+  "password": "12345678",
+  "role": "admin",
+  "firstName": "Hugo",
+  "lastName": "Hernández",
+  "birthDate": "1995-01-10",
+  "phone": "5598765432"
+}
 
 ### Wrong password → 401
 # Contraseña incorrecta → 401
@@ -518,6 +556,107 @@ DELETE {{baseUrl}}/doctors/{{createDoctor.response.body.$.doctor.id}}/time-off/{
 
 
 # =============================================================================
+# Patients / Pacientes
+# Run "Register a patient" in the Auth section first.
+# Ejecuta antes "Register a patient" de la sección Auth.
+# =============================================================================
+
+### Patient login → 200
+# Login de paciente → 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "{{patientEmail}}", "password": "{{patientPassword}}" }
+
+### Patient gets their own profile → 200
+# El paciente ve su propio perfil → 200
+GET {{baseUrl}}/patients/me
+
+### Patient updates their own phone → 200 (whatsappOptIn does not change)
+# El paciente actualiza su teléfono → 200 (whatsappOptIn no cambia)
+PATCH {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}
+Content-Type: application/json
+
+{ "phone": "55 1111 2222" }
+
+### Patient tries to list patients → 403
+# El paciente intenta listar pacientes → 403
+GET {{baseUrl}}/patients
+
+### Admin login → 200
+# Login como admin → 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "{{adminEmail}}", "password": "{{adminPassword}}" }
+
+### Register a patient without an account (e.g. by phone) → 201, hasAccount: false
+# Registrar un paciente sin cuenta (por ejemplo, por teléfono) → 201, hasAccount: false
+# @name createWalkInPatient
+POST {{baseUrl}}/patients
+Content-Type: application/json
+
+{
+  "firstName": "Ana",
+  "lastName": "Garza",
+  "birthDate": "1985-11-02",
+  "phone": "81 2345 6789"
+}
+
+### List patients (first page) → 200 with page, pageSize and total
+# Listar pacientes (primera página) → 200 con page, pageSize y total
+GET {{baseUrl}}/patients
+
+### Search by name, in any order → 200
+# Buscar por nombre, en cualquier orden → 200
+GET {{baseUrl}}/patients?search=mendez luz
+
+### Search by phone (4+ digits) → 200
+# Buscar por teléfono (4 dígitos o más) → 200
+GET {{baseUrl}}/patients?search=2345
+
+### Pagination: 1 result per page, second page → 200
+# Paginación: 1 resultado por página, segunda página → 200
+GET {{baseUrl}}/patients?page=2&pageSize=1
+
+### Invalid pageSize → 400
+# pageSize inválido → 400
+GET {{baseUrl}}/patients?pageSize=500
+
+### Get one patient → 200
+# Ver un paciente → 200
+GET {{baseUrl}}/patients/{{createWalkInPatient.response.body.$.patient.id}}
+
+### Admin tries to edit patient data → 403
+# El admin intenta editar datos de un paciente → 403
+PATCH {{baseUrl}}/patients/{{createWalkInPatient.response.body.$.patient.id}}
+Content-Type: application/json
+
+{ "phone": "81 9999 0000" }
+
+### Employee login → 200 (run "Create an employee account" in the Users section first)
+# Login de empleado → 200 (ejecuta antes "Create an employee account" de la sección Users)
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "{{employeeEmail}}", "password": "{{employeePassword}}" }
+
+### Employee updates a patient → 200
+# El empleado actualiza un paciente → 200
+PATCH {{baseUrl}}/patients/{{createWalkInPatient.response.body.$.patient.id}}
+Content-Type: application/json
+
+{ "whatsappOptIn": true }
+
+### Employee sends an empty PATCH → 400
+# El empleado manda un PATCH vacío → 400
+PATCH {{baseUrl}}/patients/{{createWalkInPatient.response.body.$.patient.id}}
+Content-Type: application/json
+
+{}
+
+
+# =============================================================================
 # Permissions (patient) / Permisos (paciente)
 # =============================================================================
 
@@ -539,6 +678,10 @@ GET {{baseUrl}}/services
 ### Patient can read doctors → 200
 # El paciente puede ver los médicos → 200
 GET {{baseUrl}}/doctors
+
+### Patient cannot see another patient → 404 (does not reveal that the id exists)
+# El paciente no puede ver a otro paciente → 404 (no revela que el id existe)
+GET {{baseUrl}}/patients/{{createWalkInPatient.response.body.$.patient.id}}
 
 ### Patient can read a doctor's schedule → 200
 # El paciente puede ver el horario de un médico → 200
