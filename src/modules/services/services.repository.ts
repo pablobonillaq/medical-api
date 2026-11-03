@@ -11,6 +11,9 @@ export const servicesRepository = {
 
   findById: (id: string) => prisma.service.findUnique({ where: { id } }),
 
+  findActiveByIds: (ids: string[]) =>
+    prisma.service.findMany({ where: { id: { in: ids }, active: true }, select: { id: true } }),
+
   create: ({ name, description, durationMinutes }: CreateServiceInput) =>
     prisma.service.create({
       data: { name, description: description ?? null, durationMinutes },

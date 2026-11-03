@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { env } from '../../config/env.js'
 import { ConflictError, ForbiddenError, UnauthorizedError } from '../../shared/errors/app-error.js'
 import { usersRepository } from '../users/users.repository.js'
-   import type { LoginInput, RegisterPatientInput } from '../users/users.schema.js'
+import type { LoginInput, RegisterPatientInput } from '../users/users.schema.js'
 import { toPublicUser } from '../users/users.types.js'
 import { SALT_ROUNDS, TOKEN_TTL } from './auth.constants.js'
 
@@ -30,14 +30,14 @@ export const authService = {
     return { user: toPublicUser(user), token }
   },
 
-     verifyToken(token: string): string {
-     try {
-       const payload = tokenPayloadSchema.parse(jwt.verify(token, env.JWT_SECRET))
-       return payload.sub
-     } catch {
-       throw new UnauthorizedError('Invalid or expired session')
-     }
-   },
+  verifyToken(token: string): string {
+    try {
+      const payload = tokenPayloadSchema.parse(jwt.verify(token, env.JWT_SECRET))
+      return payload.sub
+    } catch {
+      throw new UnauthorizedError('Invalid or expired session')
+    }
+  },
 
   async getActiveUser(id: string) {
     const user = await usersRepository.findById(id)
