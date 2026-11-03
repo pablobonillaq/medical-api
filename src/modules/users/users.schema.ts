@@ -4,28 +4,33 @@ export const ROLES = ['admin', 'doctor', 'employee', 'patient'] as const
 export const roleSchema = z.enum(ROLES, { error: 'Invalid role' })
 export type Role = z.infer<typeof roleSchema>
 
-const staffRoleSchema = roleSchema.exclude(['patient'])
+// Roles managed from /users. Doctors are created from /doctors (user + profile).
+const managedRoleSchema = roleSchema.extract(['admin', 'employee'])
 
-const email = z
+export const emailSchema = z
   .string({ error: 'Email is required' })
   .trim()
   .toLowerCase()
   .pipe(z.email({ error: 'Email must be valid' }))
 
-const password = z
+export const passwordSchema = z
   .string({ error: 'Password is required' })
   .min(8, { error: 'Password must be at least 8 characters' })
   .max(72, { error: 'Password must be at most 72 characters' })
 
-export const registerPatientSchema = z.object({ email, password })
-export const loginSchema = z.object({ email, password })
-export const createStaffSchema = z.object({ email, password, role: staffRoleSchema })
+export const registerPatientSchema = z.object({ email: emailSchema, password: passwordSchema })
+export const loginSchema = z.object({ email: emailSchema, password: passwordSchema })
+export const createStaffSchema = z.object({
+  email: emailSchema,
+  password: passwordSchema,
+  role: managedRoleSchema,
+})
 
 export const listUsersQuerySchema = z.object({ role: roleSchema.optional() })
 
 export const updateUserSchema = z
   .object({
-    role: staffRoleSchema.optional(),
+    role: managedRoleSchema.optional(),
     active: z.boolean({ error: 'active must be true or false' }).optional(),
   })
   .refine((data) => data.role !== undefined || data.active !== undefined, {

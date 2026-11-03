@@ -30,8 +30,8 @@ export const usersService = {
 
     const user = await usersRepository.findById(id)
     if (!user) throw new NotFoundError('User not found')
-    if (input.role && user.role === 'patient') {
-      throw new BadRequestError('The role of a patient account cannot be changed')
+    if (input.role && (user.role === 'patient' || user.role === 'doctor')) {
+      throw new BadRequestError('The role of patient and doctor accounts cannot be changed')
     }
 
     const updated = await usersRepository.update(id, input)
