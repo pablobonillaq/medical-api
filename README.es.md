@@ -4,13 +4,13 @@
 
 API REST para la gestión de una clínica con varios médicos: agenda de citas, expedientes clínicos, chat entre pacientes y clínica, y recordatorios de citas por WhatsApp.
 
-> **Estado:** en desarrollo. Fases 1–3 completadas (configuración base, base de datos, autenticación y roles). Fase 4 en curso: servicios y médicos terminados; siguen los horarios semanales y los días libres.
+> **Estado:** en desarrollo. Fases 1–4 completadas (configuración base, base de datos, autenticación y roles, catálogos); sigue la fase 5, citas y disponibilidad.
 > Proyecto de portafolio. Todos los datos de pruebas son **ficticios**.
 
 ## Funcionalidades
 
 - [x] Autenticación con JWT en cookies y control de acceso por roles
-- [ ] Gestión de médicos, servicios, horarios y días no laborables
+- [x] Gestión de médicos, servicios, horarios y días no laborables
 - [ ] Agenda de citas: disponibilidad, agendar, cancelar y reprogramar, sin doble agendado
 - [ ] Expediente clínico: antecedentes y notas clínicas que no se editan ni se borran
 - [ ] Registro de auditoría de cada acceso a expedientes
@@ -137,6 +137,18 @@ Acceso: **Público** (sin sesión), **Autenticado** (cualquier usuario con sesi�
 
 Para activar o desactivar a un médico se usa `PATCH /users/:userId` con `{ "active": false }`.
 
+### Horarios y días libres
+
+| Método   | Ruta                                     | Acceso                      | Descripción                                                                                                                             |
+| -------- | ---------------------------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`    | `/doctors/:doctorId/schedule`            | Autenticado                 | Devuelve el horario semanal del médico                                                                                                  |
+| `PUT`    | `/doctors/:doctorId/schedule`            | Admin o el médico           | Reemplaza el horario semanal (`{ "blocks": [{ "dayOfWeek": 1, "start": "09:00", "end": "14:00" }] }`); `400` si hay bloques traslapados |
+| `GET`    | `/doctors/:doctorId/time-off`            | Admin, empleado o el médico | Lista los próximos días libres                                                                                                          |
+| `POST`   | `/doctors/:doctorId/time-off`            | Admin o el médico           | Agrega un día libre (`startsAt` y `endsAt` en ISO 8601 con zona horaria, `reason` opcional); `409` si se traslapa                       |
+| `DELETE` | `/doctors/:doctorId/time-off/:timeOffId` | Admin o el médico           | Borra un día libre (`204`)                                                                                                              |
+
+Los días van de `1` (lunes) a `7` (domingo). Las horas usan `HH:mm` en hora local de la clínica y deben ser múltiplos de 5 minutos. Un médico solo puede administrar su propio horario y sus días libres; los pacientes no ven los días libres porque el motivo puede ser privado.
+
 Las peticiones sin una sesión válida responden `401`; las de un rol sin permiso responden `403`. Una cuenta desactivada pierde el acceso de inmediato.
 
 Los errores se devuelven como `{ "error": "mensaje" }`. Los errores de validación (`400`) incluyen además `details` con `fieldErrors` (mensajes de cada campo) y `formErrors` (errores de la petición en conjunto).
@@ -173,7 +185,7 @@ src/
 │   ├── errors/            # clases de error propias
 │   ├── middlewares/       # manejadores de 404 y de errores
 │   ├── schemas/           # schemas de Zod compartidos (ids, ayudas para PATCH)
-│   └── utils/             # utilidades como omitUndefined
+│   └── utils/             # utilidades como omitUndefined y conversión de horas (HH:mm ↔ minutos)
 ├── types/
 │   └── express.d.ts       # agrega `user` al tipo Request de Express
 └── modules/
@@ -192,6 +204,12 @@ src/
     │   └── doctors.types.ts       # formato de la respuesta
     ├── health/
     │   └── health.routes.ts
+    ├── schedules/
+    │   ├── schedules.controller.ts
+    │   ├── schedules.repository.ts
+    │   ├── schedules.routes.ts      # montado en /doctors/:doctorId
+    │   ├── schedules.schema.ts      # validación de HH:mm y de traslapes
+    │   └── schedules.service.ts     # permisos: admin o el propio médico
     ├── services/
     │   ├── services.controller.ts
     │   ├── services.repository.ts
@@ -213,7 +231,7 @@ Cada módulo agrupa su schema de validación, tipos, acceso a datos, controlador
 1. ~~Configuración base: TypeScript, linting, Express, manejo de errores y endpoint `/health`~~ ✅
 2. ~~PostgreSQL con Docker y Prisma~~ ✅
 3. ~~Autenticación y roles~~ ✅
-4. Catálogos: médicos, servicios y horarios (en curso)
+4. ~~Catálogos: médicos, servicios y horarios~~ ✅
 5. Citas y disponibilidad
 6. Expedientes clínicos y auditoría
 7. Chat en tiempo real

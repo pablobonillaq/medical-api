@@ -4,13 +4,13 @@
 
 REST API for managing a multi-doctor clinic: appointment scheduling, electronic medical records, patient–clinic chat, and appointment reminders via WhatsApp.
 
-> **Status:** in development. Phases 1–3 completed (base setup, database, authentication and roles). Phase 4 in progress: services and doctors are done; weekly schedules and days off are next.
+> **Status:** in development. Phases 1–4 completed (base setup, database, authentication and roles, catalogs); next: phase 5, appointments and availability.
 > Portfolio project. All test data is **fictitious**.
 
 ## Features
 
 - [x] JWT authentication with cookies and role-based access control
-- [ ] Management of doctors, services, schedules and days off
+- [x] Management of doctors, services, schedules and days off
 - [ ] Appointment scheduling: availability, booking, cancelling and rescheduling, with no double booking
 - [ ] Medical records: medical history and append-only clinical notes (never edited or deleted)
 - [ ] Audit log of every access to medical records
@@ -137,6 +137,18 @@ Access: **Public** (no session), **Authenticated** (any logged-in user), **Admin
 
 To enable or disable a doctor, use `PATCH /users/:userId` with `{ "active": false }`.
 
+### Schedules and time off
+
+| Method   | Path                                     | Access                        | Description                                                                                                                    |
+| -------- | ---------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `GET`    | `/doctors/:doctorId/schedule`            | Authenticated                 | Returns the doctor's weekly schedule                                                                                           |
+| `PUT`    | `/doctors/:doctorId/schedule`            | Admin or the doctor           | Replaces the weekly schedule (`{ "blocks": [{ "dayOfWeek": 1, "start": "09:00", "end": "14:00" }] }`); `400` if blocks overlap |
+| `GET`    | `/doctors/:doctorId/time-off`            | Admin, employee or the doctor | Lists upcoming time off                                                                                                        |
+| `POST`   | `/doctors/:doctorId/time-off`            | Admin or the doctor           | Adds time off (`startsAt` and `endsAt` as ISO 8601 with time zone, optional `reason`); `409` if it overlaps                    |
+| `DELETE` | `/doctors/:doctorId/time-off/:timeOffId` | Admin or the doctor           | Deletes time off (`204`)                                                                                                       |
+
+Days go from `1` (Monday) to `7` (Sunday). Times use `HH:mm` in the clinic's local time and must be multiples of 5 minutes. A doctor can only manage their own schedule and time off; patients cannot see time off because the reason may be private.
+
 Requests without a valid session return `401`; requests from a role without permission return `403`. A disabled account loses access immediately.
 
 Errors are returned as `{ "error": "message" }`. Validation errors (`400`) also include `details` with `fieldErrors` (messages for each field) and `formErrors` (errors about the request as a whole).
@@ -173,7 +185,7 @@ src/
 │   ├── errors/            # custom error classes
 │   ├── middlewares/       # 404 and error handlers
 │   ├── schemas/           # shared Zod schemas (ids, PATCH helpers)
-│   └── utils/             # helpers such as omitUndefined
+│   └── utils/             # helpers such as omitUndefined and time conversion (HH:mm ↔ minutes)
 ├── types/
 │   └── express.d.ts       # adds `user` to the Express request type
 └── modules/
@@ -192,6 +204,12 @@ src/
     │   └── doctors.types.ts       # response mapping
     ├── health/
     │   └── health.routes.ts
+    ├── schedules/
+    │   ├── schedules.controller.ts
+    │   ├── schedules.repository.ts
+    │   ├── schedules.routes.ts      # mounted under /doctors/:doctorId
+    │   ├── schedules.schema.ts      # HH:mm validation and overlap checks
+    │   └── schedules.service.ts     # permissions: admin or the doctor themselves
     ├── services/
     │   ├── services.controller.ts
     │   ├── services.repository.ts
@@ -213,7 +231,7 @@ Each module groups its validation schema, types, data access, controller and rou
 1. ~~Base setup: TypeScript, linting, Express, error handling and `/health` endpoint~~ ✅
 2. ~~PostgreSQL with Docker and Prisma~~ ✅
 3. ~~Authentication and roles~~ ✅
-4. Catalogs: doctors, services and schedules (in progress)
+4. ~~Catalogs: doctors, services and schedules~~ ✅
 5. Appointments and availability
 6. Medical records and audit log
 7. Real-time chat

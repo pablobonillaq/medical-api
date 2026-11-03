@@ -21,6 +21,8 @@
 @employeePassword = 12345678
 @doctorEmail = dra.garay@clinica.test
 @doctorPassword = 12345678
+@otherDoctorEmail = dr.ruiz@clinica.test
+@otherDoctorPassword = 12345678
 
 
 # =============================================================================
@@ -376,6 +378,146 @@ Content-Type: application/json
 
 
 # =============================================================================
+# Schedules and time off / Horarios y días libres
+# Run "Create a doctor" in the Doctors section first.
+# Ejecuta antes "Create a doctor" de la sección Doctors.
+# Days: 1 = Monday … 7 = Sunday. Times: HH:mm, multiples of 5 minutes.
+# Días: 1 = lunes … 7 = domingo. Horas: HH:mm, múltiplos de 5 minutos.
+# =============================================================================
+
+### Admin login → 200
+# Login como admin → 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "{{adminEmail}}", "password": "{{adminPassword}}" }
+
+### Set the doctor's weekly schedule → 200 (blocks sorted, times as HH:mm)
+# Definir el horario semanal del médico → 200 (bloques ordenados, horas en HH:mm)
+PUT {{baseUrl}}/doctors/{{createDoctor.response.body.$.doctor.id}}/schedule
+Content-Type: application/json
+
+{
+  "blocks": [
+    { "dayOfWeek": 1, "start": "09:00", "end": "14:00" },
+    { "dayOfWeek": 1, "start": "16:00", "end": "19:00" },
+    { "dayOfWeek": 3, "start": "09:00", "end": "13:30" },
+    { "dayOfWeek": 5, "start": "10:00", "end": "15:00" }
+  ]
+}
+
+### Overlapping blocks → 400 (message in formErrors)
+# Bloques traslapados → 400 (mensaje en formErrors)
+PUT {{baseUrl}}/doctors/{{createDoctor.response.body.$.doctor.id}}/schedule
+Content-Type: application/json
+
+{
+  "blocks": [
+    { "dayOfWeek": 1, "start": "09:00", "end": "14:00" },
+    { "dayOfWeek": 1, "start": "13:00", "end": "15:00" }
+  ]
+}
+
+### Invalid day and times → 400
+# Día y horas inválidos → 400
+PUT {{baseUrl}}/doctors/{{createDoctor.response.body.$.doctor.id}}/schedule
+Content-Type: application/json
+
+{ "blocks": [{ "dayOfWeek": 8, "start": "9:00", "end": "09:07" }] }
+
+### Get the doctor's schedule → 200
+# Ver el horario del médico → 200
+GET {{baseUrl}}/doctors/{{createDoctor.response.body.$.doctor.id}}/schedule
+
+### Add time off → 201 (409 if it overlaps with another one)
+# Agregar un día libre → 201 (409 si se traslapa con otro)
+# @name createTimeOff
+POST {{baseUrl}}/doctors/{{createDoctor.response.body.$.doctor.id}}/time-off
+Content-Type: application/json
+
+{
+  "startsAt": "2027-12-24T00:00:00-06:00",
+  "endsAt": "2027-12-26T00:00:00-06:00",
+  "reason": "Vacaciones"
+}
+
+### Overlapping time off → 409
+# Día libre traslapado → 409
+POST {{baseUrl}}/doctors/{{createDoctor.response.body.$.doctor.id}}/time-off
+Content-Type: application/json
+
+{ "startsAt": "2027-12-25T09:00:00-06:00", "endsAt": "2027-12-25T14:00:00-06:00" }
+
+### Date without time zone → 400
+# Fecha sin zona horaria → 400
+POST {{baseUrl}}/doctors/{{createDoctor.response.body.$.doctor.id}}/time-off
+Content-Type: application/json
+
+{ "startsAt": "2027-12-31T00:00:00", "endsAt": "2028-01-01T00:00:00-06:00" }
+
+### Time off in the past → 400
+# Día libre en el pasado → 400
+POST {{baseUrl}}/doctors/{{createDoctor.response.body.$.doctor.id}}/time-off
+Content-Type: application/json
+
+{ "startsAt": "2020-01-01T00:00:00-06:00", "endsAt": "2020-01-02T00:00:00-06:00" }
+
+### List upcoming time off → 200
+# Listar los próximos días libres → 200
+GET {{baseUrl}}/doctors/{{createDoctor.response.body.$.doctor.id}}/time-off
+
+### Create a second doctor → 201 (to test permissions between doctors)
+# Crear un segundo médico → 201 (para probar permisos entre médicos)
+# @name createOtherDoctor
+POST {{baseUrl}}/doctors
+Content-Type: application/json
+
+{
+  "email": "{{otherDoctorEmail}}",
+  "password": "{{otherDoctorPassword}}",
+  "firstName": "Jorge",
+  "lastName": "Ruiz",
+  "specialty": "Pediatría",
+  "licenseNumber": "87654321"
+}
+
+### Doctor login → 200
+# Login del médico → 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "{{doctorEmail}}", "password": "{{doctorPassword}}" }
+
+### Doctor updates their own schedule → 200
+# El médico actualiza su propio horario → 200
+PUT {{baseUrl}}/doctors/{{createDoctor.response.body.$.doctor.id}}/schedule
+Content-Type: application/json
+
+{
+  "blocks": [
+    { "dayOfWeek": 1, "start": "09:00", "end": "14:00" },
+    { "dayOfWeek": 3, "start": "09:00", "end": "13:30" },
+    { "dayOfWeek": 5, "start": "10:00", "end": "15:00" }
+  ]
+}
+
+### Doctor tries to change another doctor's schedule → 403
+# El médico intenta cambiar el horario de otro médico → 403
+PUT {{baseUrl}}/doctors/{{createOtherDoctor.response.body.$.doctor.id}}/schedule
+Content-Type: application/json
+
+{ "blocks": [{ "dayOfWeek": 2, "start": "08:00", "end": "12:00" }] }
+
+### Doctor deletes their own time off → 204 (uses the id from "createTimeOff")
+# El médico borra su propio día libre → 204 (usa el id de "createTimeOff")
+DELETE {{baseUrl}}/doctors/{{createDoctor.response.body.$.doctor.id}}/time-off/{{createTimeOff.response.body.$.timeOff.id}}
+
+### Delete it again → 404
+# Borrarlo otra vez → 404
+DELETE {{baseUrl}}/doctors/{{createDoctor.response.body.$.doctor.id}}/time-off/{{createTimeOff.response.body.$.timeOff.id}}
+
+
+# =============================================================================
 # Permissions (patient) / Permisos (paciente)
 # =============================================================================
 
@@ -397,6 +539,21 @@ GET {{baseUrl}}/services
 ### Patient can read doctors → 200
 # El paciente puede ver los médicos → 200
 GET {{baseUrl}}/doctors
+
+### Patient can read a doctor's schedule → 200
+# El paciente puede ver el horario de un médico → 200
+GET {{baseUrl}}/doctors/{{createDoctor.response.body.$.doctor.id}}/schedule
+
+### Patient cannot see a doctor's time off → 403
+# El paciente no puede ver los días libres de un médico → 403
+GET {{baseUrl}}/doctors/{{createDoctor.response.body.$.doctor.id}}/time-off
+
+### Patient tries to change a doctor's schedule → 403
+# El paciente intenta cambiar el horario de un médico → 403
+PUT {{baseUrl}}/doctors/{{createDoctor.response.body.$.doctor.id}}/schedule
+Content-Type: application/json
+
+{ "blocks": [] }
 
 ### Patient tries to create a service → 403
 # El paciente intenta crear un servicio → 403
