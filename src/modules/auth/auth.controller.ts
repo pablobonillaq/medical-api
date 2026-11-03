@@ -1,7 +1,8 @@
 import type { CookieOptions, RequestHandler } from 'express'
 import { env } from '../../config/env.js'
 import { UnauthorizedError } from '../../shared/errors/app-error.js'
-import { loginSchema, registerPatientSchema } from '../users/users.schema.js'
+import { registerPatientSchema } from '../patients/patients.schema.js'
+import { loginSchema } from '../users/users.schema.js'
 import { ACCESS_TOKEN_COOKIE, TOKEN_TTL_MS } from './auth.constants.js'
 import { authService } from './auth.service.js'
 
@@ -14,8 +15,8 @@ const cookieOptions: CookieOptions = {
 
 const register: RequestHandler = async (req, res) => {
   const input = registerPatientSchema.parse(req.body)
-  const user = await authService.registerPatient(input)
-  res.status(201).json({ user })
+  const patient = await authService.registerPatient(input)
+  res.status(201).json({ patient })
 }
 
 const login: RequestHandler = async (req, res) => {

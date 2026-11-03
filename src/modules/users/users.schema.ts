@@ -18,7 +18,6 @@ export const passwordSchema = z
   .min(8, { error: 'Password must be at least 8 characters' })
   .max(72, { error: 'Password must be at most 72 characters' })
 
-export const registerPatientSchema = z.object({ email: emailSchema, password: passwordSchema })
 export const loginSchema = z.object({ email: emailSchema, password: passwordSchema })
 export const createStaffSchema = z.object({
   email: emailSchema,
@@ -39,7 +38,6 @@ export const updateUserSchema = z
 
 export const userIdParamsSchema = z.object({ id: z.uuid({ error: 'Invalid user id' }) })
 
-export type RegisterPatientInput = z.infer<typeof registerPatientSchema>
 export type LoginInput = z.infer<typeof loginSchema>
 export type CreateStaffInput = z.infer<typeof createStaffSchema>
 export type ListUsersQuery = z.infer<typeof listUsersQuerySchema>

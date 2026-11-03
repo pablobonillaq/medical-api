@@ -6,6 +6,7 @@ import { authRouter } from './modules/auth/auth.routes.js'
 import { usersRouter } from './modules/users/users.routes.js'
 import { servicesRouter } from './modules/services/services.routes.js'
 import { doctorsRouter } from './modules/doctors/doctors.routes.js'
+import { patientsRouter } from './modules/patients/patients.routes.js'
 
 export const createApp = () => {
   const app = express()
@@ -19,6 +20,7 @@ export const createApp = () => {
   app.use('/users', usersRouter)
   app.use('/services', servicesRouter)
   app.use('/doctors', doctorsRouter)
+  app.use('/patients', patientsRouter)
 
   app.use(notFoundHandler)
   app.use(errorHandler)

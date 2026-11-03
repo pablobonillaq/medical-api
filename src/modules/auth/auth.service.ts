@@ -4,20 +4,23 @@ import { z } from 'zod'
 import { env } from '../../config/env.js'
 import { ConflictError, ForbiddenError, UnauthorizedError } from '../../shared/errors/app-error.js'
 import { usersRepository } from '../users/users.repository.js'
-import type { LoginInput, RegisterPatientInput } from '../users/users.schema.js'
+import { patientsRepository } from '../patients/patients.repository.js'
+import type { RegisterPatientInput } from '../patients/patients.schema.js'
+import { toPatientResponse } from '../patients/patients.types.js'
+import type { LoginInput } from '../users/users.schema.js'
 import { toPublicUser } from '../users/users.types.js'
 import { SALT_ROUNDS, TOKEN_TTL } from './auth.constants.js'
 
 const tokenPayloadSchema = z.object({ sub: z.uuid() })
 
 export const authService = {
-  async registerPatient({ email, password }: RegisterPatientInput) {
+  async registerPatient({ email, password, ...profile }: RegisterPatientInput) {
     const existing = await usersRepository.findByEmail(email)
     if (existing) throw new ConflictError('Email is already registered')
 
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS)
-    const user = await usersRepository.create({ email, passwordHash, role: 'patient' })
-    return toPublicUser(user)
+    const patient = await patientsRepository.createWithUser({ email, passwordHash, ...profile })
+    return toPatientResponse(patient)
   },
 
   async login({ email, password }: LoginInput) {

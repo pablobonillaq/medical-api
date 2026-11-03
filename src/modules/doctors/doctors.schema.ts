@@ -1,13 +1,6 @@
 import { z } from 'zod'
-import { hasAtLeastOneField } from '../../shared/schemas/common.js'
+import { hasAtLeastOneField, personNameSchema } from '../../shared/schemas/common.js'
 import { emailSchema, passwordSchema } from '../users/users.schema.js'
-
-const personName = (field: string) =>
-  z
-    .string({ error: `${field} is required` })
-    .trim()
-    .min(2, { error: `${field} must be at least 2 characters` })
-    .max(80, { error: `${field} must be at most 80 characters` })
 
 const specialty = z
   .string({ error: 'specialty is required' })
@@ -24,16 +17,16 @@ const licenseNumber = z
 export const createDoctorSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
-  firstName: personName('firstName'),
-  lastName: personName('lastName'),
+  firstName: personNameSchema('firstName'),
+  lastName: personNameSchema('lastName'),
   specialty,
   licenseNumber,
 })
 
 export const updateDoctorSchema = z
   .object({
-    firstName: personName('firstName').optional(),
-    lastName: personName('lastName').optional(),
+    firstName: personNameSchema('firstName').optional(),
+    lastName: personNameSchema('lastName').optional(),
     specialty: specialty.optional(),
     licenseNumber: licenseNumber.optional(),
   })

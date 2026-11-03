@@ -29,6 +29,7 @@ model User {
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   doctor Doctor?
+  patient Patient?
   @@map("users")
 }
 
@@ -101,4 +102,21 @@ model TimeOff {
 
   @@index([doctorId, startsAt])
   @@map("time_off")
+}
+
+model Patient {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  userId        String?  @unique @map("user_id") @db.Uuid
+  firstName     String   @map("first_name")
+  lastName      String   @map("last_name")
+  birthDate     DateTime @map("birth_date") @db.Date
+  phone         String
+  whatsappOptIn Boolean  @default(false) @map("whatsapp_opt_in")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([lastName, firstName])
+  @@map("patients")
 }
