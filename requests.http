@@ -680,6 +680,7 @@ Content-Type: application/json
 
 ### Free slots on a Monday → 200 (every 15 min; startsAt in UTC, time in clinic time)
 # Horarios libres un lunes → 200 (cada 15 min; startsAt en UTC, time en hora de la clínica)
+# @name mondayAvailability
 GET {{baseUrl}}/availability?doctorId={{createDoctor.response.body.$.doctor.id}}&serviceId={{createService.response.body.$.service.id}}&date={{nextMonday}}
 
 ### A day without schedule (Tuesday) → 200 with "slots": []
@@ -715,6 +716,184 @@ GET {{baseUrl}}/availability?doctorId=0190a7b2-0000-7000-8000-000000000000&servi
 POST {{baseUrl}}/auth/logout
 
 ###
+GET {{baseUrl}}/availability?doctorId={{createDoctor.response.body.$.doctor.id}}&serviceId={{createService.response.body.$.service.id}}&date={{nextMonday}}
+
+
+# =============================================================================
+# Appointments / Citas
+# Run the Availability section first: "mondayAvailability" provides the free slots.
+# Ejecuta antes la sección Availability: "mondayAvailability" da los horarios libres.
+# slots[0] and slots[1] are the first two free slots of that Monday.
+# slots[0] y slots[1] son los dos primeros horarios libres de ese lunes.
+# =============================================================================
+
+### Patient login → 200
+# Login de paciente → 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "{{patientEmail}}", "password": "{{patientPassword}}" }
+
+### Patient books the first free slot → 201 (time in clinic time)
+# El paciente agenda el primer horario libre → 201 (time en hora de la clínica)
+# @name patientAppointment
+POST {{baseUrl}}/appointments
+Content-Type: application/json
+
+{
+  "doctorId": "{{createDoctor.response.body.$.doctor.id}}",
+  "serviceId": "{{createService.response.body.$.service.id}}",
+  "startsAt": "{{mondayAvailability.response.body.$.slots[0].startsAt}}",
+  "notes": "Primera consulta"
+}
+
+### Same slot again → 409 (no longer available)
+# El mismo horario otra vez → 409 (ya no está disponible)
+POST {{baseUrl}}/appointments
+Content-Type: application/json
+
+{
+  "doctorId": "{{createDoctor.response.body.$.doctor.id}}",
+  "serviceId": "{{createService.response.body.$.service.id}}",
+  "startsAt": "{{mondayAvailability.response.body.$.slots[0].startsAt}}"
+}
+
+### A time that is not a free slot (09:07) → 409
+# Una hora que no es un horario libre (09:07) → 409
+POST {{baseUrl}}/appointments
+Content-Type: application/json
+
+{
+  "doctorId": "{{createDoctor.response.body.$.doctor.id}}",
+  "serviceId": "{{createService.response.body.$.service.id}}",
+  "startsAt": "{{nextMonday}}T09:07:00-06:00"
+}
+
+### Start without time zone → 400
+# Inicio sin zona horaria → 400
+POST {{baseUrl}}/appointments
+Content-Type: application/json
+
+{
+  "doctorId": "{{createDoctor.response.body.$.doctor.id}}",
+  "serviceId": "{{createService.response.body.$.service.id}}",
+  "startsAt": "{{nextMonday}}T09:00:00"
+}
+
+### Patient tries to book for another patient → 403
+# El paciente intenta agendar para otro paciente → 403
+POST {{baseUrl}}/appointments
+Content-Type: application/json
+
+{
+  "doctorId": "{{createDoctor.response.body.$.doctor.id}}",
+  "serviceId": "{{createService.response.body.$.service.id}}",
+  "startsAt": "{{mondayAvailability.response.body.$.slots[1].startsAt}}",
+  "patientId": "{{createWalkInPatient.response.body.$.patient.id}}"
+}
+
+### Patient lists their appointments → 200 (only their own)
+# El paciente lista sus citas → 200 (solo las suyas)
+GET {{baseUrl}}/appointments
+
+### Patient filters by another patient → 200, still only their own
+# El paciente filtra por otro paciente → 200, sigue viendo solo las suyas
+GET {{baseUrl}}/appointments?patientId={{createWalkInPatient.response.body.$.patient.id}}
+
+### Patient gets their appointment → 200
+# El paciente ve su cita → 200
+GET {{baseUrl}}/appointments/{{patientAppointment.response.body.$.appointment.id}}
+
+### Employee login → 200
+# Login de empleado → 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "{{employeeEmail}}", "password": "{{employeePassword}}" }
+
+### Employee books without patientId → 400
+# El empleado agenda sin patientId → 400
+POST {{baseUrl}}/appointments
+Content-Type: application/json
+
+{
+  "doctorId": "{{createDoctor.response.body.$.doctor.id}}",
+  "serviceId": "{{createService.response.body.$.service.id}}",
+  "startsAt": "{{mondayAvailability.response.body.$.slots[1].startsAt}}"
+}
+
+### Employee books the second slot for the walk-in patient → 201
+# El empleado agenda el segundo horario para la paciente sin cuenta → 201
+# @name employeeAppointment
+POST {{baseUrl}}/appointments
+Content-Type: application/json
+
+{
+  "doctorId": "{{createDoctor.response.body.$.doctor.id}}",
+  "serviceId": "{{createService.response.body.$.service.id}}",
+  "startsAt": "{{mondayAvailability.response.body.$.slots[1].startsAt}}",
+  "patientId": "{{createWalkInPatient.response.body.$.patient.id}}"
+}
+
+### Employee lists all appointments → 200
+# El empleado lista todas las citas → 200
+GET {{baseUrl}}/appointments
+
+### Filter by status and date range → 200
+# Filtrar por estado y rango de fechas → 200
+GET {{baseUrl}}/appointments?status=scheduled&from={{nextMonday}}T00:00:00-06:00&to={{nextTuesday}}T00:00:00-06:00
+
+### Invalid status → 400
+# Estado inválido → 400
+GET {{baseUrl}}/appointments?status=deleted
+
+### Doctor login → 200
+# Login del médico → 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "{{doctorEmail}}", "password": "{{doctorPassword}}" }
+
+### Doctor sees their agenda → 200
+# El médico ve su agenda → 200
+GET {{baseUrl}}/appointments
+
+### Doctor tries to book → 403
+# El médico intenta agendar → 403
+POST {{baseUrl}}/appointments
+Content-Type: application/json
+
+{
+  "doctorId": "{{createDoctor.response.body.$.doctor.id}}",
+  "serviceId": "{{createService.response.body.$.service.id}}",
+  "startsAt": "{{mondayAvailability.response.body.$.slots[2].startsAt}}",
+  "patientId": "{{createWalkInPatient.response.body.$.patient.id}}"
+}
+
+### Patient login → 200
+# Login de paciente → 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "{{patientEmail}}", "password": "{{patientPassword}}" }
+
+### Patient cannot see another patient's appointment → 404
+# El paciente no puede ver la cita de otro paciente → 404
+GET {{baseUrl}}/appointments/{{employeeAppointment.response.body.$.appointment.id}}
+
+### Patient cancels their appointment → 200 (status: cancelled)
+# El paciente cancela su cita → 200 (status: cancelled)
+PATCH {{baseUrl}}/appointments/{{patientAppointment.response.body.$.appointment.id}}/cancel
+Content-Type: application/json
+
+{ "reason": "Tengo un viaje" }
+
+### Cancel it again → 409
+# Cancelarla otra vez → 409
+PATCH {{baseUrl}}/appointments/{{patientAppointment.response.body.$.appointment.id}}/cancel
+
+### The cancelled slot is free again → 200 (slots[0] appears again)
+# El horario cancelado vuelve a estar libre → 200 (slots[0] aparece de nuevo)
 GET {{baseUrl}}/availability?doctorId={{createDoctor.response.body.$.doctor.id}}&serviceId={{createService.response.body.$.service.id}}&date={{nextMonday}}
 
 

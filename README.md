@@ -4,7 +4,7 @@
 
 REST API for managing a multi-doctor clinic: appointment scheduling, electronic medical records, patient–clinic chat, and appointment reminders via WhatsApp.
 
-> **Status:** in development. Phases 1–4 completed (base setup, database, authentication and roles, catalogs). Phase 5 in progress: patient profiles and availability are done; booking, cancelling and rescheduling are next.
+> **Status:** in development. Phases 1–4 completed (base setup, database, authentication and roles, catalogs). Phase 5 in progress: patient profiles, availability, booking and cancellation are done; rescheduling and status changes are next.
 > Portfolio project. All test data is **fictitious**.
 
 ## Features
@@ -186,6 +186,17 @@ Candidate start times are generated every 15 minutes inside the doctor's schedul
 }
 ```
 
+### Appointments
+
+| Method  | Path                       | Access                           | Description                                                                                                                                                                                                                                                                 |
+| ------- | -------------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST`  | `/appointments`            | Patient, employee or admin       | Books an appointment (`doctorId`, `serviceId`, `startsAt`, optional `notes`). `startsAt` must be one of the free slots. Staff must send `patientId`; patients always book for themselves. `409` if the slot is taken or the patient already has an appointment at that time |
+| `GET`   | `/appointments`            | Authenticated                    | Lists appointments with filters `from`, `to`, `status`, `doctorId`, `patientId` and pagination. Patients only see their own, doctors only their agenda, staff see all                                                                                                       |
+| `GET`   | `/appointments/:id`        | The patient, the doctor or staff | Returns an appointment (`404` for anyone else)                                                                                                                                                                                                                              |
+| `PATCH` | `/appointments/:id/cancel` | The patient, the doctor or staff | Cancels an appointment (optional `reason`). Patients need at least 2 hours of notice. Appointments are never deleted                                                                                                                                                        |
+
+Each appointment includes `startsAt` and `endsAt` in UTC plus `date` and `time` in the clinic's local time. If two requests book the same slot at the same moment, the database accepts one and the other gets `409`.
+
 Requests without a valid session return `401`; requests from a role without permission return `403`. A disabled account loses access immediately.
 
 Errors are returned as `{ "error": "message" }`. Validation errors (`400`) also include `details` with `fieldErrors` (messages for each field) and `formErrors` (errors about the request as a whole).
@@ -233,9 +244,14 @@ src/
 │   └── express.d.ts       # adds `user` to the Express request type
 └── modules/
     ├── appointments/
-    │   ├── appointments.constants.ts  # active statuses, slot step, booking window
+    │   ├── appointments.constants.ts  # active statuses, slot step, booking window, cancel notice
+    │   ├── appointments.controller.ts
+    │   ├── appointments.errors.ts     # detects the double booking error from PostgreSQL
     │   ├── appointments.repository.ts
+    │   ├── appointments.routes.ts
     │   ├── appointments.schema.ts
+    │   ├── appointments.service.ts    # booking, role-scoped lists and cancellation rules
+    │   ├── appointments.types.ts      # response with local date and time
     │   ├── availability.controller.ts
     │   ├── availability.routes.ts
     │   ├── availability.service.ts    # loads schedule, time off and appointments in parallel

@@ -4,7 +4,7 @@
 
 API REST para la gestión de una clínica con varios médicos: agenda de citas, expedientes clínicos, chat entre pacientes y clínica, y recordatorios de citas por WhatsApp.
 
-> **Estado:** en desarrollo. Fases 1–4 completadas (configuración base, base de datos, autenticación y roles, catálogos). Fase 5 en curso: perfiles de pacientes y disponibilidad terminados; sigue agendar, cancelar y reprogramar citas.
+> **Estado:** en desarrollo. Fases 1–4 completadas (configuración base, base de datos, autenticación y roles, catálogos). Fase 5 en curso: perfiles de pacientes, disponibilidad, agendar y cancelar terminados; siguen reprogramar y cambiar el estado de las citas.
 > Proyecto de portafolio. Todos los datos de pruebas son **ficticios**.
 
 ## Funcionalidades
@@ -186,6 +186,17 @@ Se prueban horas de inicio cada 15 minutos dentro de los bloques del horario del
 }
 ```
 
+### Citas
+
+| Método  | Ruta                       | Acceso                               | Descripción                                                                                                                                                                                                                                                                         |
+| ------- | -------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST`  | `/appointments`            | Paciente, empleado o admin           | Agenda una cita (`doctorId`, `serviceId`, `startsAt`, `notes` opcional). `startsAt` debe ser uno de los horarios libres. El personal debe enviar `patientId`; un paciente siempre agenda para sí mismo. `409` si el horario está ocupado o el paciente ya tiene una cita a esa hora |
+| `GET`   | `/appointments`            | Autenticado                          | Lista citas con filtros `from`, `to`, `status`, `doctorId`, `patientId` y paginación. El paciente solo ve las suyas, el médico solo su agenda, el personal todas                                                                                                                    |
+| `GET`   | `/appointments/:id`        | El paciente, el médico o el personal | Devuelve una cita (`404` para cualquier otra persona)                                                                                                                                                                                                                               |
+| `PATCH` | `/appointments/:id/cancel` | El paciente, el médico o el personal | Cancela una cita (`reason` opcional). El paciente necesita al menos 2 horas de anticipación. Las citas nunca se borran                                                                                                                                                              |
+
+Cada cita incluye `startsAt` y `endsAt` en UTC, y `date` y `time` en hora local de la clínica. Si dos peticiones agendan el mismo horario en el mismo momento, la base de datos acepta una y la otra recibe `409`.
+
 Las peticiones sin una sesión válida responden `401`; las de un rol sin permiso responden `403`. Una cuenta desactivada pierde el acceso de inmediato.
 
 Los errores se devuelven como `{ "error": "mensaje" }`. Los errores de validación (`400`) incluyen además `details` con `fieldErrors` (mensajes de cada campo) y `formErrors` (errores de la petición en conjunto).
@@ -233,9 +244,14 @@ src/
 │   └── express.d.ts       # agrega `user` al tipo Request de Express
 └── modules/
     ├── appointments/
-    │   ├── appointments.constants.ts  # estados activos, intervalo de horarios, ventana de reserva
+    │   ├── appointments.constants.ts  # estados activos, intervalo de horarios, ventana de reserva, aviso para cancelar
+    │   ├── appointments.controller.ts
+    │   ├── appointments.errors.ts     # detecta el error de doble agendado de PostgreSQL
     │   ├── appointments.repository.ts
+    │   ├── appointments.routes.ts
     │   ├── appointments.schema.ts
+    │   ├── appointments.service.ts    # agendar, listas según el rol y reglas de cancelación
+    │   ├── appointments.types.ts      # respuesta con fecha y hora locales
     │   ├── availability.controller.ts
     │   ├── availability.routes.ts
     │   ├── availability.service.ts    # carga horario, días libres y citas en paralelo
