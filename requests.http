@@ -898,6 +898,113 @@ GET {{baseUrl}}/availability?doctorId={{createDoctor.response.body.$.doctor.id}}
 
 
 # =============================================================================
+# Appointment changes / Cambios en citas
+# Run the Appointments section first.
+# Ejecuta antes la sección Appointments.
+# State machine / Máquina de estados:
+#   scheduled → confirmed | completed | no_show | cancelled
+#   confirmed → completed | no_show | cancelled
+#   cancelled, completed, no_show → (final / finales)
+# =============================================================================
+
+### Patient login → 200
+# Login de paciente → 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "{{patientEmail}}", "password": "{{patientPassword}}" }
+
+### Patient books the third free slot → 201
+# El paciente agenda el tercer horario libre → 201
+# @name changeAppointment
+POST {{baseUrl}}/appointments
+Content-Type: application/json
+
+{
+  "doctorId": "{{createDoctor.response.body.$.doctor.id}}",
+  "serviceId": "{{createService.response.body.$.service.id}}",
+  "startsAt": "{{mondayAvailability.response.body.$.slots[2].startsAt}}"
+}
+
+### Patient confirms the appointment → 200 (status: confirmed)
+# El paciente confirma la cita → 200 (status: confirmed)
+PATCH {{baseUrl}}/appointments/{{changeAppointment.response.body.$.appointment.id}}/status
+Content-Type: application/json
+
+{ "status": "confirmed" }
+
+### Confirm it again → 409 (no transition from confirmed to confirmed)
+# Confirmarla otra vez → 409 (no hay transición de confirmed a confirmed)
+PATCH {{baseUrl}}/appointments/{{changeAppointment.response.body.$.appointment.id}}/status
+Content-Type: application/json
+
+{ "status": "confirmed" }
+
+### Patient marks it as no_show → 403 (only the doctor or staff record the outcome)
+# El paciente la marca como no_show → 403 (solo el médico o el personal registran el resultado)
+PATCH {{baseUrl}}/appointments/{{changeAppointment.response.body.$.appointment.id}}/status
+Content-Type: application/json
+
+{ "status": "no_show" }
+
+### "cancelled" through /status → 400 (cancelling has its own endpoint)
+# "cancelled" por /status → 400 (cancelar tiene su propio endpoint)
+PATCH {{baseUrl}}/appointments/{{changeAppointment.response.body.$.appointment.id}}/status
+Content-Type: application/json
+
+{ "status": "cancelled" }
+
+### Reschedule to the fourth free slot → 200 (status goes back to scheduled)
+# Reprogramar al cuarto horario libre → 200 (el estado vuelve a scheduled)
+PATCH {{baseUrl}}/appointments/{{changeAppointment.response.body.$.appointment.id}}/reschedule
+Content-Type: application/json
+
+{ "startsAt": "{{mondayAvailability.response.body.$.slots[3].startsAt}}" }
+
+### Reschedule to the same time → 400
+# Reprogramar a la misma hora → 400
+PATCH {{baseUrl}}/appointments/{{changeAppointment.response.body.$.appointment.id}}/reschedule
+Content-Type: application/json
+
+{ "startsAt": "{{mondayAvailability.response.body.$.slots[3].startsAt}}" }
+
+### Reschedule to a slot taken by another patient → 409
+# Reprogramar a un horario ocupado por otra paciente → 409
+PATCH {{baseUrl}}/appointments/{{changeAppointment.response.body.$.appointment.id}}/reschedule
+Content-Type: application/json
+
+{ "startsAt": "{{mondayAvailability.response.body.$.slots[1].startsAt}}" }
+
+### Reschedule a cancelled appointment → 409
+# Reprogramar una cita cancelada → 409
+PATCH {{baseUrl}}/appointments/{{patientAppointment.response.body.$.appointment.id}}/reschedule
+Content-Type: application/json
+
+{ "startsAt": "{{mondayAvailability.response.body.$.slots[4].startsAt}}" }
+
+### Doctor login → 200
+# Login del médico → 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "{{doctorEmail}}", "password": "{{doctorPassword}}" }
+
+### Doctor marks an upcoming appointment as completed → 400 (it has not started)
+# El médico marca como atendida una cita futura → 400 (todavía no empieza)
+PATCH {{baseUrl}}/appointments/{{changeAppointment.response.body.$.appointment.id}}/status
+Content-Type: application/json
+
+{ "status": "completed" }
+
+### Doctor tries to reschedule → 403 (doctors register time off instead)
+# El médico intenta reprogramar → 403 (los médicos registran días libres)
+PATCH {{baseUrl}}/appointments/{{changeAppointment.response.body.$.appointment.id}}/reschedule
+Content-Type: application/json
+
+{ "startsAt": "{{mondayAvailability.response.body.$.slots[4].startsAt}}" }
+
+
+# =============================================================================
 # Permissions (patient) / Permisos (paciente)
 # =============================================================================
 

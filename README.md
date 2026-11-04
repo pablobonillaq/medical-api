@@ -4,7 +4,7 @@
 
 REST API for managing a multi-doctor clinic: appointment scheduling, electronic medical records, patient–clinic chat, and appointment reminders via WhatsApp.
 
-> **Status:** in development. Phases 1–4 completed (base setup, database, authentication and roles, catalogs). Phase 5 in progress: patient profiles, availability, booking and cancellation are done; rescheduling and status changes are next.
+> **Status:** in development. Phases 1–5 completed (base setup, database, authentication and roles, catalogs, appointments); next: automated tests and CI.
 > Portfolio project. All test data is **fictitious**.
 
 ## Features
@@ -12,7 +12,7 @@ REST API for managing a multi-doctor clinic: appointment scheduling, electronic 
 - [x] JWT authentication with cookies and role-based access control
 - [x] Management of doctors, services, schedules and days off
 - [x] Patient profiles: self-registration or front-desk registration, search and pagination
-- [ ] Appointment scheduling: availability, booking, cancelling and rescheduling, with no double booking
+- [x] Appointment scheduling: availability, booking, cancelling and rescheduling, with no double booking
 - [ ] Medical records: medical history and append-only clinical notes (never edited or deleted)
 - [ ] Audit log of every access to medical records
 - [ ] Real-time chat between patients and the clinic
@@ -188,12 +188,24 @@ Candidate start times are generated every 15 minutes inside the doctor's schedul
 
 ### Appointments
 
-| Method  | Path                       | Access                           | Description                                                                                                                                                                                                                                                                 |
-| ------- | -------------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST`  | `/appointments`            | Patient, employee or admin       | Books an appointment (`doctorId`, `serviceId`, `startsAt`, optional `notes`). `startsAt` must be one of the free slots. Staff must send `patientId`; patients always book for themselves. `409` if the slot is taken or the patient already has an appointment at that time |
-| `GET`   | `/appointments`            | Authenticated                    | Lists appointments with filters `from`, `to`, `status`, `doctorId`, `patientId` and pagination. Patients only see their own, doctors only their agenda, staff see all                                                                                                       |
-| `GET`   | `/appointments/:id`        | The patient, the doctor or staff | Returns an appointment (`404` for anyone else)                                                                                                                                                                                                                              |
-| `PATCH` | `/appointments/:id/cancel` | The patient, the doctor or staff | Cancels an appointment (optional `reason`). Patients need at least 2 hours of notice. Appointments are never deleted                                                                                                                                                        |
+| Method  | Path                           | Access                           | Description                                                                                                                                                                                                                                                                 |
+| ------- | ------------------------------ | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST`  | `/appointments`                | Patient, employee or admin       | Books an appointment (`doctorId`, `serviceId`, `startsAt`, optional `notes`). `startsAt` must be one of the free slots. Staff must send `patientId`; patients always book for themselves. `409` if the slot is taken or the patient already has an appointment at that time |
+| `GET`   | `/appointments`                | Authenticated                    | Lists appointments with filters `from`, `to`, `status`, `doctorId`, `patientId` and pagination. Patients only see their own, doctors only their agenda, staff see all                                                                                                       |
+| `GET`   | `/appointments/:id`            | The patient, the doctor or staff | Returns an appointment (`404` for anyone else)                                                                                                                                                                                                                              |
+| `PATCH` | `/appointments/:id/cancel`     | The patient, the doctor or staff | Cancels an appointment (optional `reason`). Patients need at least 2 hours of notice. Appointments are never deleted                                                                                                                                                        |
+| `PATCH` | `/appointments/:id/reschedule` | The patient or staff             | Moves the appointment to another free slot with the same doctor and service (`{ "startsAt": "..." }`). Patients need at least 2 hours of notice                                                                                                                             |
+| `PATCH` | `/appointments/:id/status`     | Depends on the change            | `{ "status": "confirmed" \| "completed" \| "no_show" }`, following the state machine below                                                                                                                                                                                  |
+
+Status changes follow a state machine:
+
+| From                                | Allowed changes                                  |
+| ----------------------------------- | ------------------------------------------------ |
+| `scheduled`                         | `confirmed`, `completed`, `no_show`, `cancelled` |
+| `confirmed`                         | `completed`, `no_show`, `cancelled`              |
+| `cancelled`, `completed`, `no_show` | none (final states)                              |
+
+Patients (or staff) confirm upcoming appointments; doctors (or staff) record `completed` or `no_show` once the appointment has started. A rescheduled appointment goes back to `scheduled`.
 
 Each appointment includes `startsAt` and `endsAt` in UTC plus `date` and `time` in the clinic's local time. If two requests book the same slot at the same moment, the database accepts one and the other gets `409`.
 
@@ -244,13 +256,13 @@ src/
 │   └── express.d.ts       # adds `user` to the Express request type
 └── modules/
     ├── appointments/
-    │   ├── appointments.constants.ts  # active statuses, slot step, booking window, cancel notice
+    │   ├── appointments.constants.ts  # active statuses, booking rules, STATUS_TRANSITIONS
     │   ├── appointments.controller.ts
     │   ├── appointments.errors.ts     # detects the double booking error from PostgreSQL
     │   ├── appointments.repository.ts
     │   ├── appointments.routes.ts
     │   ├── appointments.schema.ts
-    │   ├── appointments.service.ts    # booking, role-scoped lists and cancellation rules
+    │   ├── appointments.service.ts    # booking, role-scoped lists, cancel, reschedule, state machine
     │   ├── appointments.types.ts      # response with local date and time
     │   ├── availability.controller.ts
     │   ├── availability.routes.ts
@@ -306,12 +318,13 @@ Each module groups its validation schema, types, data access, controller and rou
 2. ~~PostgreSQL with Docker and Prisma~~ ✅
 3. ~~Authentication and roles~~ ✅
 4. ~~Catalogs: doctors, services and schedules~~ ✅
-5. Appointments and availability (in progress)
-6. Medical records and audit log
-7. Real-time chat
-8. WhatsApp reminders
-9. File attachments
-10. Documentation, security and deployment
+5. ~~Appointments and availability~~ ✅
+6. Automated tests (Vitest), CI and code coverage (SonarQube) (in progress)
+7. Medical records and audit log
+8. Real-time chat
+9. WhatsApp reminders
+10. File attachments
+11. Documentation, security and deployment
 
 ## Data privacy
 

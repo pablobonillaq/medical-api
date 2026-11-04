@@ -4,7 +4,7 @@
 
 API REST para la gestión de una clínica con varios médicos: agenda de citas, expedientes clínicos, chat entre pacientes y clínica, y recordatorios de citas por WhatsApp.
 
-> **Estado:** en desarrollo. Fases 1–4 completadas (configuración base, base de datos, autenticación y roles, catálogos). Fase 5 en curso: perfiles de pacientes, disponibilidad, agendar y cancelar terminados; siguen reprogramar y cambiar el estado de las citas.
+> **Estado:** en desarrollo. Fases 1–5 completadas (configuración base, base de datos, autenticación y roles, catálogos, citas); siguen las pruebas automáticas y la integración continua.
 > Proyecto de portafolio. Todos los datos de pruebas son **ficticios**.
 
 ## Funcionalidades
@@ -12,7 +12,7 @@ API REST para la gestión de una clínica con varios médicos: agenda de citas, 
 - [x] Autenticación con JWT en cookies y control de acceso por roles
 - [x] Gestión de médicos, servicios, horarios y días no laborables
 - [x] Perfiles de pacientes: registro propio o por recepción, búsqueda y paginación
-- [ ] Agenda de citas: disponibilidad, agendar, cancelar y reprogramar, sin doble agendado
+- [x] Agenda de citas: disponibilidad, agendar, cancelar y reprogramar, sin doble agendado
 - [ ] Expediente clínico: antecedentes y notas clínicas que no se editan ni se borran
 - [ ] Registro de auditoría de cada acceso a expedientes
 - [ ] Chat en tiempo real entre pacientes y clínica
@@ -188,12 +188,24 @@ Se prueban horas de inicio cada 15 minutos dentro de los bloques del horario del
 
 ### Citas
 
-| Método  | Ruta                       | Acceso                               | Descripción                                                                                                                                                                                                                                                                         |
-| ------- | -------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST`  | `/appointments`            | Paciente, empleado o admin           | Agenda una cita (`doctorId`, `serviceId`, `startsAt`, `notes` opcional). `startsAt` debe ser uno de los horarios libres. El personal debe enviar `patientId`; un paciente siempre agenda para sí mismo. `409` si el horario está ocupado o el paciente ya tiene una cita a esa hora |
-| `GET`   | `/appointments`            | Autenticado                          | Lista citas con filtros `from`, `to`, `status`, `doctorId`, `patientId` y paginación. El paciente solo ve las suyas, el médico solo su agenda, el personal todas                                                                                                                    |
-| `GET`   | `/appointments/:id`        | El paciente, el médico o el personal | Devuelve una cita (`404` para cualquier otra persona)                                                                                                                                                                                                                               |
-| `PATCH` | `/appointments/:id/cancel` | El paciente, el médico o el personal | Cancela una cita (`reason` opcional). El paciente necesita al menos 2 horas de anticipación. Las citas nunca se borran                                                                                                                                                              |
+| Método  | Ruta                           | Acceso                               | Descripción                                                                                                                                                                                                                                                                         |
+| ------- | ------------------------------ | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST`  | `/appointments`                | Paciente, empleado o admin           | Agenda una cita (`doctorId`, `serviceId`, `startsAt`, `notes` opcional). `startsAt` debe ser uno de los horarios libres. El personal debe enviar `patientId`; un paciente siempre agenda para sí mismo. `409` si el horario está ocupado o el paciente ya tiene una cita a esa hora |
+| `GET`   | `/appointments`                | Autenticado                          | Lista citas con filtros `from`, `to`, `status`, `doctorId`, `patientId` y paginación. El paciente solo ve las suyas, el médico solo su agenda, el personal todas                                                                                                                    |
+| `GET`   | `/appointments/:id`            | El paciente, el médico o el personal | Devuelve una cita (`404` para cualquier otra persona)                                                                                                                                                                                                                               |
+| `PATCH` | `/appointments/:id/cancel`     | El paciente, el médico o el personal | Cancela una cita (`reason` opcional). El paciente necesita al menos 2 horas de anticipación. Las citas nunca se borran                                                                                                                                                              |
+| `PATCH` | `/appointments/:id/reschedule` | El paciente o el personal            | Mueve la cita a otro horario libre con el mismo médico y servicio (`{ "startsAt": "..." }`). El paciente necesita al menos 2 horas de anticipación                                                                                                                                  |
+| `PATCH` | `/appointments/:id/status`     | Depende del cambio                   | `{ "status": "confirmed" \| "completed" \| "no_show" }`, según la máquina de estados de abajo                                                                                                                                                                                       |
+
+Los cambios de estado siguen una máquina de estados:
+
+| Desde                               | Cambios permitidos                               |
+| ----------------------------------- | ------------------------------------------------ |
+| `scheduled`                         | `confirmed`, `completed`, `no_show`, `cancelled` |
+| `confirmed`                         | `completed`, `no_show`, `cancelled`              |
+| `cancelled`, `completed`, `no_show` | ninguno (estados finales)                        |
+
+El paciente (o el personal) confirma las citas futuras; el médico (o el personal) registra `completed` o `no_show` una vez que la cita empezó. Una cita reprogramada vuelve a `scheduled`.
 
 Cada cita incluye `startsAt` y `endsAt` en UTC, y `date` y `time` en hora local de la clínica. Si dos peticiones agendan el mismo horario en el mismo momento, la base de datos acepta una y la otra recibe `409`.
 
@@ -244,13 +256,13 @@ src/
 │   └── express.d.ts       # agrega `user` al tipo Request de Express
 └── modules/
     ├── appointments/
-    │   ├── appointments.constants.ts  # estados activos, intervalo de horarios, ventana de reserva, aviso para cancelar
+    │   ├── appointments.constants.ts  # estados activos, reglas de reserva, STATUS_TRANSITIONS
     │   ├── appointments.controller.ts
     │   ├── appointments.errors.ts     # detecta el error de doble agendado de PostgreSQL
     │   ├── appointments.repository.ts
     │   ├── appointments.routes.ts
     │   ├── appointments.schema.ts
-    │   ├── appointments.service.ts    # agendar, listas según el rol y reglas de cancelación
+    │   ├── appointments.service.ts    # agendar, listas según el rol, cancelar, reprogramar, máquina de estados
     │   ├── appointments.types.ts      # respuesta con fecha y hora locales
     │   ├── availability.controller.ts
     │   ├── availability.routes.ts
@@ -306,12 +318,13 @@ Cada módulo agrupa su schema de validación, tipos, acceso a datos, controlador
 2. ~~PostgreSQL con Docker y Prisma~~ ✅
 3. ~~Autenticación y roles~~ ✅
 4. ~~Catálogos: médicos, servicios y horarios~~ ✅
-5. Citas y disponibilidad (en curso)
-6. Expedientes clínicos y auditoría
-7. Chat en tiempo real
-8. Recordatorios por WhatsApp
-9. Archivos adjuntos
-10. Documentación, seguridad y despliegue
+5. ~~Citas y disponibilidad~~ ✅
+6. Pruebas automáticas (Vitest), integración continua y cobertura de código (SonarQube) (en curso)
+7. Expedientes clínicos y auditoría
+8. Chat en tiempo real
+9. Recordatorios por WhatsApp
+10. Archivos adjuntos
+11. Documentación, seguridad y despliegue
 
 ## Privacidad de datos
 
