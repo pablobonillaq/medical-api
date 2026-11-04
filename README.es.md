@@ -4,7 +4,7 @@
 
 API REST para la gestión de una clínica con varios médicos: agenda de citas, expedientes clínicos, chat entre pacientes y clínica, y recordatorios de citas por WhatsApp.
 
-> **Estado:** en desarrollo. Fases 1–4 completadas (configuración base, base de datos, autenticación y roles, catálogos). Fase 5 en curso: perfiles de pacientes terminados; siguen las citas y la disponibilidad.
+> **Estado:** en desarrollo. Fases 1–4 completadas (configuración base, base de datos, autenticación y roles, catálogos). Fase 5 en curso: perfiles de pacientes y disponibilidad terminados; sigue agendar, cancelar y reprogramar citas.
 > Proyecto de portafolio. Todos los datos de pruebas son **ficticios**.
 
 ## Funcionalidades
@@ -65,17 +65,18 @@ Comprueba que todo funciona en `GET http://localhost:3000/health`.
 
 ## Variables de entorno
 
-| Variable            | Descripción                                              | Ejemplo                                                                 |
-| ------------------- | -------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `NODE_ENV`          | Entorno: `development`, `test` o `production`            | `development`                                                           |
-| `PORT`              | Puerto en el que corre la API                            | `3000`                                                                  |
-| `POSTGRES_USER`     | Usuario de PostgreSQL que crea Docker                    | `medical`                                                               |
-| `POSTGRES_PASSWORD` | Contraseña de PostgreSQL que crea Docker                 | `medical`                                                               |
-| `POSTGRES_DB`       | Base de datos que crea Docker                            | `medical_api`                                                           |
-| `DATABASE_URL`      | Cadena de conexión que usan Prisma y la API              | `postgresql://medical:medical@localhost:5433/medical_api?schema=public` |
-| `JWT_SECRET`        | Clave para firmar los tokens JWT                         | una cadena larga y aleatoria                                            |
-| `ADMIN_EMAIL`       | Email de la primera cuenta de admin que crea el seed     | `admin@clinica.test`                                                    |
-| `ADMIN_PASSWORD`    | Contraseña de esa cuenta de admin (mínimo 12 caracteres) | una contraseña larga                                                    |
+| Variable            | Descripción                                                                                  | Ejemplo                                                                 |
+| ------------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `NODE_ENV`          | Entorno: `development`, `test` o `production`                                                | `development`                                                           |
+| `PORT`              | Puerto en el que corre la API                                                                | `3000`                                                                  |
+| `POSTGRES_USER`     | Usuario de PostgreSQL que crea Docker                                                        | `medical`                                                               |
+| `POSTGRES_PASSWORD` | Contraseña de PostgreSQL que crea Docker                                                     | `medical`                                                               |
+| `POSTGRES_DB`       | Base de datos que crea Docker                                                                | `medical_api`                                                           |
+| `DATABASE_URL`      | Cadena de conexión que usan Prisma y la API                                                  | `postgresql://medical:medical@localhost:5433/medical_api?schema=public` |
+| `JWT_SECRET`        | Clave para firmar los tokens JWT                                                             | una cadena larga y aleatoria                                            |
+| `CLINIC_TIMEZONE`   | Zona horaria de la clínica (IANA). Los horarios usan hora local; las citas se guardan en UTC | `America/Mexico_City`                                                   |
+| `ADMIN_EMAIL`       | Email de la primera cuenta de admin que crea el seed                                         | `admin@clinica.test`                                                    |
+| `ADMIN_PASSWORD`    | Contraseña de esa cuenta de admin (mínimo 12 caracteres)                                     | una contraseña larga                                                    |
 
 Los valores de `POSTGRES_*` deben coincidir con el usuario, la contraseña y la base de datos de `DATABASE_URL`. Las variables `ADMIN_*` solo las usa `npm run db:seed`.
 
@@ -162,23 +163,51 @@ Los días van de `1` (lunes) a `7` (domingo). Las horas usan `HH:mm` en hora loc
 
 El teléfono se acepta como `55 1234 5678`, `(55) 1234-5678` o `+52…` y siempre se guarda en formato E.164 (`+525512345678`), como lo exige WhatsApp. `birthDate` usa `AAAA-MM-DD`. `whatsappOptIn` guarda el consentimiento del paciente para recibir recordatorios y por defecto es `false`.
 
+### Disponibilidad
+
+| Método | Ruta                                                 | Acceso      | Descripción                                                                                   |
+| ------ | ---------------------------------------------------- | ----------- | --------------------------------------------------------------------------------------------- |
+| `GET`  | `/availability?doctorId=&serviceId=&date=AAAA-MM-DD` | Autenticado | Horarios libres de un médico para un servicio en una fecha (desde hoy hasta 90 días adelante) |
+
+Se prueban horas de inicio cada 15 minutos dentro de los bloques del horario del médico. Un horario se ofrece solo si el servicio completo cabe en el bloque, empieza en el futuro y no se traslapa con los días libres ni con las citas activas del médico. Cada horario incluye `startsAt` y `endsAt` en UTC, y `time` en hora local de la clínica:
+
+```json
+{
+  "date": "2026-11-09",
+  "timeZone": "America/Mexico_City",
+  "durationMinutes": 30,
+  "slots": [
+    {
+      "startsAt": "2026-11-09T15:00:00.000Z",
+      "endsAt": "2026-11-09T15:30:00.000Z",
+      "time": "09:00"
+    }
+  ]
+}
+```
+
 Las peticiones sin una sesión válida responden `401`; las de un rol sin permiso responden `403`. Una cuenta desactivada pierde el acceso de inmediato.
 
 Los errores se devuelven como `{ "error": "mensaje" }`. Los errores de validación (`400`) incluyen además `details` con `fieldErrors` (mensajes de cada campo) y `formErrors` (errores de la petición en conjunto).
 
 ## Modelo de datos
 
-| Tabla             | Descripción                                                                                                                       |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `users`           | Cuentas: email, hash de la contraseña, rol y estado `active`                                                                      |
-| `doctors`         | Perfil del médico (1:1 con `users`): nombre, especialidad y cédula profesional única                                              |
-| `services`        | Servicios que ofrece la clínica, con su duración en minutos                                                                       |
-| `doctor_services` | Relación muchos a muchos: qué servicios ofrece cada médico                                                                        |
-| `schedule_blocks` | Horario semanal: día (1 = lunes … 7 = domingo) e inicio/fin en minutos desde la medianoche, hora de la clínica                    |
-| `patients`        | Perfil del paciente: nombre, fecha de nacimiento, teléfono (E.164) y consentimiento de WhatsApp. La cuenta de usuario es opcional |
-| `time_off`        | Días libres y ausencias de cada médico (fecha y hora exactas de inicio y fin)                                                     |
+| Tabla             | Descripción                                                                                                                                                           |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `users`           | Cuentas: email, hash de la contraseña, rol y estado `active`                                                                                                          |
+| `doctors`         | Perfil del médico (1:1 con `users`): nombre, especialidad y cédula profesional única                                                                                  |
+| `services`        | Servicios que ofrece la clínica, con su duración en minutos                                                                                                           |
+| `doctor_services` | Relación muchos a muchos: qué servicios ofrece cada médico                                                                                                            |
+| `schedule_blocks` | Horario semanal: día (1 = lunes … 7 = domingo) e inicio/fin en minutos desde la medianoche, hora de la clínica                                                        |
+| `patients`        | Perfil del paciente: nombre, fecha de nacimiento, teléfono (E.164) y consentimiento de WhatsApp. La cuenta de usuario es opcional                                     |
+| `time_off`        | Días libres y ausencias de cada médico (fecha y hora exactas de inicio y fin)                                                                                         |
+| `appointments`    | Citas: paciente, médico, servicio, inicio y fin (UTC), estado (`scheduled`, `confirmed`, `cancelled`, `completed`, `no_show`) y datos de cancelación. Nunca se borran |
 
 Además de la validación en la API, la base de datos aplica sus propias reglas con restricciones `CHECK` (duración de los servicios, días y horas válidos, rangos de días libres).
+
+### Prevención del doble agendado
+
+La tabla `appointments` tiene una restricción `EXCLUDE` de PostgreSQL (con la extensión `btree_gist`): un médico no puede tener dos citas activas (`scheduled` o `confirmed`) cuyos rangos de tiempo se traslapen. La aplica la base de datos, así que también funciona cuando dos peticiones intentan agendar el mismo horario en el mismo momento, algo que una revisión solo en el código no puede garantizar. Las citas canceladas liberan el horario.
 
 ## Estructura del proyecto
 
@@ -199,10 +228,18 @@ src/
 │   ├── errors/            # clases de error propias
 │   ├── middlewares/       # manejadores de 404 y de errores
 │   ├── schemas/           # schemas de Zod compartidos (ids, nombres, paginación, ayudas para PATCH)
-│   └── utils/             # utilidades como omitUndefined y conversión de horas (HH:mm ↔ minutos)
+│   └── utils/             # utilidades: omitUndefined, HH:mm ↔ minutos, zona horaria de la clínica ↔ UTC
 ├── types/
 │   └── express.d.ts       # agrega `user` al tipo Request de Express
 └── modules/
+    ├── appointments/
+    │   ├── appointments.constants.ts  # estados activos, intervalo de horarios, ventana de reserva
+    │   ├── appointments.repository.ts
+    │   ├── appointments.schema.ts
+    │   ├── availability.controller.ts
+    │   ├── availability.routes.ts
+    │   ├── availability.service.ts    # carga horario, días libres y citas en paralelo
+    │   └── availability.ts            # computeSlots: función pura, sin acceso a la base de datos
     ├── auth/
     │   ├── auth.constants.ts
     │   ├── auth.controller.ts

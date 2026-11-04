@@ -4,7 +4,7 @@
 
 REST API for managing a multi-doctor clinic: appointment scheduling, electronic medical records, patient–clinic chat, and appointment reminders via WhatsApp.
 
-> **Status:** in development. Phases 1–4 completed (base setup, database, authentication and roles, catalogs). Phase 5 in progress: patient profiles are done; appointments and availability are next.
+> **Status:** in development. Phases 1–4 completed (base setup, database, authentication and roles, catalogs). Phase 5 in progress: patient profiles and availability are done; booking, cancelling and rescheduling are next.
 > Portfolio project. All test data is **fictitious**.
 
 ## Features
@@ -65,17 +65,18 @@ Check that everything works at `GET http://localhost:3000/health`.
 
 ## Environment variables
 
-| Variable            | Description                                             | Example                                                                 |
-| ------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `NODE_ENV`          | Environment: `development`, `test` or `production`      | `development`                                                           |
-| `PORT`              | Port the API runs on                                    | `3000`                                                                  |
-| `POSTGRES_USER`     | PostgreSQL user created by Docker                       | `medical`                                                               |
-| `POSTGRES_PASSWORD` | PostgreSQL password created by Docker                   | `medical`                                                               |
-| `POSTGRES_DB`       | Database created by Docker                              | `medical_api`                                                           |
-| `DATABASE_URL`      | Connection string used by Prisma and the API            | `postgresql://medical:medical@localhost:5433/medical_api?schema=public` |
-| `JWT_SECRET`        | Secret key used to sign JWTs                            | a long random string                                                    |
-| `ADMIN_EMAIL`       | Email of the first admin account created by the seed    | `admin@clinica.test`                                                    |
-| `ADMIN_PASSWORD`    | Password of that admin account (at least 12 characters) | a long password                                                         |
+| Variable            | Description                                                                       | Example                                                                 |
+| ------------------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `NODE_ENV`          | Environment: `development`, `test` or `production`                                | `development`                                                           |
+| `PORT`              | Port the API runs on                                                              | `3000`                                                                  |
+| `POSTGRES_USER`     | PostgreSQL user created by Docker                                                 | `medical`                                                               |
+| `POSTGRES_PASSWORD` | PostgreSQL password created by Docker                                             | `medical`                                                               |
+| `POSTGRES_DB`       | Database created by Docker                                                        | `medical_api`                                                           |
+| `DATABASE_URL`      | Connection string used by Prisma and the API                                      | `postgresql://medical:medical@localhost:5433/medical_api?schema=public` |
+| `JWT_SECRET`        | Secret key used to sign JWTs                                                      | a long random string                                                    |
+| `CLINIC_TIMEZONE`   | Clinic time zone (IANA). Schedules use local time; appointments are stored in UTC | `America/Mexico_City`                                                   |
+| `ADMIN_EMAIL`       | Email of the first admin account created by the seed                              | `admin@clinica.test`                                                    |
+| `ADMIN_PASSWORD`    | Password of that admin account (at least 12 characters)                           | a long password                                                         |
 
 The `POSTGRES_*` values must match the user, password and database in `DATABASE_URL`. `ADMIN_*` are only used by `npm run db:seed`.
 
@@ -162,23 +163,51 @@ Days go from `1` (Monday) to `7` (Sunday). Times use `HH:mm` in the clinic's loc
 
 Phones are accepted as `55 1234 5678`, `(55) 1234-5678` or `+52…` and always stored in E.164 format (`+525512345678`), as WhatsApp requires. `birthDate` uses `YYYY-MM-DD`. `whatsappOptIn` records the patient's consent to receive reminders and defaults to `false`.
 
+### Availability
+
+| Method | Path                                                 | Access        | Description                                                               |
+| ------ | ---------------------------------------------------- | ------------- | ------------------------------------------------------------------------- |
+| `GET`  | `/availability?doctorId=&serviceId=&date=YYYY-MM-DD` | Authenticated | Free slots for a doctor and service on a date (today up to 90 days ahead) |
+
+Candidate start times are generated every 15 minutes inside the doctor's schedule blocks. A slot is offered only if the whole service fits in the block, it starts in the future and it does not overlap the doctor's time off or active appointments. Each slot includes `startsAt` and `endsAt` in UTC and `time` in the clinic's local time:
+
+```json
+{
+  "date": "2026-11-09",
+  "timeZone": "America/Mexico_City",
+  "durationMinutes": 30,
+  "slots": [
+    {
+      "startsAt": "2026-11-09T15:00:00.000Z",
+      "endsAt": "2026-11-09T15:30:00.000Z",
+      "time": "09:00"
+    }
+  ]
+}
+```
+
 Requests without a valid session return `401`; requests from a role without permission return `403`. A disabled account loses access immediately.
 
 Errors are returned as `{ "error": "message" }`. Validation errors (`400`) also include `details` with `fieldErrors` (messages for each field) and `formErrors` (errors about the request as a whole).
 
 ## Data model
 
-| Table             | Description                                                                                         |
-| ----------------- | --------------------------------------------------------------------------------------------------- |
-| `users`           | Accounts: email, password hash, role and `active` status                                            |
-| `doctors`         | Doctor profile (1:1 with `users`): name, specialty and unique license number                        |
-| `services`        | Services offered by the clinic, with their duration in minutes                                      |
-| `doctor_services` | Many-to-many relation: which services each doctor offers                                            |
-| `schedule_blocks` | Weekly schedule: day (1 = Monday … 7 = Sunday) and start/end in minutes since midnight, clinic time |
-| `patients`        | Patient profile: name, birth date, phone (E.164) and WhatsApp consent. The user account is optional |
-| `time_off`        | Days off and absences of each doctor (exact start and end timestamps)                               |
+| Table             | Description                                                                                                                                                              |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `users`           | Accounts: email, password hash, role and `active` status                                                                                                                 |
+| `doctors`         | Doctor profile (1:1 with `users`): name, specialty and unique license number                                                                                             |
+| `services`        | Services offered by the clinic, with their duration in minutes                                                                                                           |
+| `doctor_services` | Many-to-many relation: which services each doctor offers                                                                                                                 |
+| `schedule_blocks` | Weekly schedule: day (1 = Monday … 7 = Sunday) and start/end in minutes since midnight, clinic time                                                                      |
+| `patients`        | Patient profile: name, birth date, phone (E.164) and WhatsApp consent. The user account is optional                                                                      |
+| `time_off`        | Days off and absences of each doctor (exact start and end timestamps)                                                                                                    |
+| `appointments`    | Appointments: patient, doctor, service, start and end (UTC), status (`scheduled`, `confirmed`, `cancelled`, `completed`, `no_show`) and cancellation data. Never deleted |
 
 Besides the validation in the API, the database enforces its own rules with `CHECK` constraints (service durations, valid days and hours, time off ranges).
+
+### Double booking prevention
+
+The `appointments` table has a PostgreSQL `EXCLUDE` constraint (with the `btree_gist` extension): a doctor cannot have two active appointments (`scheduled` or `confirmed`) whose time ranges overlap. The database enforces it, so it also holds when two requests try to book the same slot at the same moment, which a check in the code alone cannot guarantee. Cancelled appointments free the slot.
 
 ## Project structure
 
@@ -199,10 +228,18 @@ src/
 │   ├── errors/            # custom error classes
 │   ├── middlewares/       # 404 and error handlers
 │   ├── schemas/           # shared Zod schemas (ids, names, pagination, PATCH helpers)
-│   └── utils/             # helpers such as omitUndefined and time conversion (HH:mm ↔ minutes)
+│   └── utils/             # helpers: omitUndefined, HH:mm ↔ minutes, clinic time zone ↔ UTC
 ├── types/
 │   └── express.d.ts       # adds `user` to the Express request type
 └── modules/
+    ├── appointments/
+    │   ├── appointments.constants.ts  # active statuses, slot step, booking window
+    │   ├── appointments.repository.ts
+    │   ├── appointments.schema.ts
+    │   ├── availability.controller.ts
+    │   ├── availability.routes.ts
+    │   ├── availability.service.ts    # loads schedule, time off and appointments in parallel
+    │   └── availability.ts            # computeSlots: pure function, no database access
     ├── auth/
     │   ├── auth.constants.ts
     │   ├── auth.controller.ts

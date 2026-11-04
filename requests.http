@@ -24,6 +24,13 @@
 @otherDoctorEmail = dr.ruiz@clinica.test
 @otherDoctorPassword = 12345678
 
+# Availability dates: update them to an upcoming Monday and the Tuesday after it
+# (at most 90 days ahead). The test doctor works on Mondays, not on Tuesdays.
+# Fechas de disponibilidad: cámbialas por un lunes próximo y el martes siguiente
+# (máximo 90 días adelante). La doctora de prueba trabaja los lunes, no los martes.
+@nextMonday = 2026-11-09
+@nextTuesday = 2026-11-10
+
 
 # =============================================================================
 # Health / Estado
@@ -654,6 +661,61 @@ PATCH {{baseUrl}}/patients/{{createWalkInPatient.response.body.$.patient.id}}
 Content-Type: application/json
 
 {}
+
+
+# =============================================================================
+# Availability / Disponibilidad
+# Run "Create a service", "Create a doctor", "Assign services to the doctor" and
+# "Set the doctor's weekly schedule" first.
+# Ejecuta antes "Create a service", "Create a doctor", "Assign services to the doctor"
+# y "Set the doctor's weekly schedule".
+# =============================================================================
+
+### Patient login → 200 (any logged-in user can check availability)
+# Login de paciente → 200 (cualquier usuario con sesión puede consultar la disponibilidad)
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "{{patientEmail}}", "password": "{{patientPassword}}" }
+
+### Free slots on a Monday → 200 (every 15 min; startsAt in UTC, time in clinic time)
+# Horarios libres un lunes → 200 (cada 15 min; startsAt en UTC, time en hora de la clínica)
+GET {{baseUrl}}/availability?doctorId={{createDoctor.response.body.$.doctor.id}}&serviceId={{createService.response.body.$.service.id}}&date={{nextMonday}}
+
+### A day without schedule (Tuesday) → 200 with "slots": []
+# Un día sin horario (martes) → 200 con "slots": []
+GET {{baseUrl}}/availability?doctorId={{createDoctor.response.body.$.doctor.id}}&serviceId={{createService.response.body.$.service.id}}&date={{nextTuesday}}
+
+### Date in the past → 400
+# Fecha en el pasado → 400
+GET {{baseUrl}}/availability?doctorId={{createDoctor.response.body.$.doctor.id}}&serviceId={{createService.response.body.$.service.id}}&date={{$localDatetime "YYYY-MM-DD" -1 d}}
+
+### More than 90 days ahead → 400
+# Más de 90 días adelante → 400
+GET {{baseUrl}}/availability?doctorId={{createDoctor.response.body.$.doctor.id}}&serviceId={{createService.response.body.$.service.id}}&date={{$localDatetime "YYYY-MM-DD" 120 d}}
+
+### Invalid date format → 400
+# Formato de fecha inválido → 400
+GET {{baseUrl}}/availability?doctorId={{createDoctor.response.body.$.doctor.id}}&serviceId={{createService.response.body.$.service.id}}&date=09/11/2026
+
+### Missing parameters → 400 with details per field
+# Faltan parámetros → 400 con detalle por campo
+GET {{baseUrl}}/availability
+
+### Service the doctor does not offer → 400 (uses the second doctor, who has no services)
+# Servicio que el médico no ofrece → 400 (usa al segundo médico, que no tiene servicios)
+GET {{baseUrl}}/availability?doctorId={{createOtherDoctor.response.body.$.doctor.id}}&serviceId={{createService.response.body.$.service.id}}&date={{nextMonday}}
+
+### Doctor that does not exist → 404
+# Médico que no existe → 404
+GET {{baseUrl}}/availability?doctorId=0190a7b2-0000-7000-8000-000000000000&serviceId={{createService.response.body.$.service.id}}&date={{nextMonday}}
+
+### Without a session → 401
+# Sin sesión → 401
+POST {{baseUrl}}/auth/logout
+
+###
+GET {{baseUrl}}/availability?doctorId={{createDoctor.response.body.$.doctor.id}}&serviceId={{createService.response.body.$.service.id}}&date={{nextMonday}}
 
 
 # =============================================================================
