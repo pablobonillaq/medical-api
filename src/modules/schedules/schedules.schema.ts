@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isoDateTimeSchema } from '../../shared/schemas/common.js'
 import { minutesToTime, TIME_OF_DAY_REGEX, timeToMinutes } from '../../shared/utils/time.js'
 
 const timeOfDay = z
@@ -46,17 +47,10 @@ export const replaceScheduleSchema = z.object({
     }),
 })
 
-const isoDateTime = z.iso
-  .datetime({
-    offset: true,
-    error: 'Use an ISO 8601 date with time zone, e.g. 2026-12-24T00:00:00-06:00',
-  })
-  .transform((value) => new Date(value))
-
 export const createTimeOffSchema = z
   .object({
-    startsAt: isoDateTime,
-    endsAt: isoDateTime,
+    startsAt: isoDateTimeSchema,
+    endsAt: isoDateTimeSchema,
     reason: z
       .string()
       .trim()

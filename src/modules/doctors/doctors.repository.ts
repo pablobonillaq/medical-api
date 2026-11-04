@@ -35,6 +35,9 @@ export const doctorsRepository = {
 
   findById: (id: string) => prisma.doctor.findUnique({ where: { id }, include: doctorInclude }),
 
+  findByUserId: (userId: string) =>
+    prisma.doctor.findUnique({ where: { userId }, select: { id: true } }),
+
   findByLicenseNumber: (licenseNumber: string) =>
     prisma.doctor.findUnique({ where: { licenseNumber } }),
 
