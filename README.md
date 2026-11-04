@@ -2,9 +2,13 @@
 
 # Medical API
 
+[![CI](https://github.com/pablobonillaq/medical-api/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/pablobonillaq/medical-api/actions/workflows/ci.yml)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=pablobonillaq_medical-api&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=pablobonillaq_medical-api)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=pablobonillaq_medical-api&metric=coverage)](https://sonarcloud.io/summary/new_code?id=pablobonillaq_medical-api)
+
 REST API for managing a multi-doctor clinic: appointment scheduling, electronic medical records, patient–clinic chat, and appointment reminders via WhatsApp.
 
-> **Status:** in development. Phases 1–5 completed (base setup, database, authentication and roles, catalogs, appointments); next: automated tests and CI.
+> **Status:** in development. Phases 1–6 completed (base setup, database, authentication and roles, catalogs, appointments, tests and CI); next: medical records and audit log.
 > Portfolio project. All test data is **fictitious**.
 
 ## Features
@@ -38,7 +42,9 @@ REST API for managing a multi-doctor clinic: appointment scheduling, electronic 
 - **Authentication:** JWT (jsonwebtoken) in httpOnly cookies, passwords hashed with bcrypt
 - **Validation:** Zod
 - **Code quality:** ESLint (typescript-eslint) and Prettier
-- **Coming soon:** Socket.IO, WhatsApp Cloud API, Vitest
+- **Testing:** Vitest, Supertest and V8 coverage
+- **CI:** GitHub Actions and SonarQube Cloud
+- **Coming soon:** Socket.IO, WhatsApp Cloud API
 
 ## Requirements
 
@@ -82,19 +88,47 @@ The `POSTGRES_*` values must match the user, password and database in `DATABASE_
 
 ## Scripts
 
-| Command               | Description                                                  |
-| --------------------- | ------------------------------------------------------------ |
-| `npm run dev`         | Starts the development server with hot reload                |
-| `npm run typecheck`   | Type-checks the code with TypeScript                         |
-| `npm run lint`        | Lints the code with ESLint                                   |
-| `npm run format`      | Formats the code with Prettier                               |
-| `npm run check`       | Runs typecheck, lint and the format check                    |
-| `npm run db:up`       | Starts the PostgreSQL container                              |
-| `npm run db:down`     | Stops the PostgreSQL container (data is kept)                |
-| `npm run db:migrate`  | Creates and applies migrations from the Prisma schema        |
-| `npm run db:generate` | Generates the Prisma client                                  |
-| `npm run db:studio`   | Opens Prisma Studio to browse the data                       |
-| `npm run db:seed`     | Creates the first admin account (safe to run more than once) |
+| Command                 | Description                                                  |
+| ----------------------- | ------------------------------------------------------------ |
+| `npm run dev`           | Starts the development server with hot reload                |
+| `npm run typecheck`     | Type-checks the code with TypeScript                         |
+| `npm run lint`          | Lints the code with ESLint                                   |
+| `npm run format`        | Formats the code with Prettier                               |
+| `npm run check`         | Runs typecheck, lint, the format check and the unit tests    |
+| `npm test`              | Runs all tests (unit and integration)                        |
+| `npm run test:unit`     | Runs the unit tests (no database needed)                     |
+| `npm run test:int`      | Runs the integration tests against the test database         |
+| `npm run test:watch`    | Runs the unit tests in watch mode                            |
+| `npm run test:coverage` | Runs all tests and generates the coverage report             |
+| `npm run db:up`         | Starts the PostgreSQL container                              |
+| `npm run db:down`       | Stops the PostgreSQL container (data is kept)                |
+| `npm run db:migrate`    | Creates and applies migrations from the Prisma schema        |
+| `npm run db:generate`   | Generates the Prisma client                                  |
+| `npm run db:studio`     | Opens Prisma Studio to browse the data                       |
+| `npm run db:seed`       | Creates the first admin account (safe to run more than once) |
+
+## Testing
+
+Tests use **Vitest** and live next to the code they test:
+
+| Type        | Files                  | What they cover                                                                                 |
+| ----------- | ---------------------- | ----------------------------------------------------------------------------------------------- |
+| Unit        | `src/**/*.test.ts`     | Pure logic: time and time zone helpers, slot calculation, Zod schemas, appointment status rules |
+| Integration | `src/**/*.int.test.ts` | HTTP requests with **Supertest** against a real PostgreSQL database                             |
+
+The integration tests need the database container running (`npm run db:up`). Before they start, Vitest creates a separate database, `medical_api_test`, and applies the migrations to it, so your development data is never touched. Every test starts with empty tables.
+
+The integration tests also check the database rules directly, for example that two requests booking the same slot at the same time end with one `201` and one `409`.
+
+```bash
+npm run db:up
+npm test               # unit + integration
+npm run test:coverage  # report in coverage/index.html
+```
+
+### Continuous integration
+
+On every push to `master` and every pull request, [GitHub Actions](.github/workflows/ci.yml) starts a PostgreSQL 18 service and runs the type check, ESLint, the Prettier check and all tests with coverage. The coverage report is then sent to **SonarQube Cloud**, which checks the Quality Gate (bugs, vulnerabilities, code smells, duplication and coverage of new code).
 
 ## API endpoints
 
@@ -235,6 +269,8 @@ The `appointments` table has a PostgreSQL `EXCLUDE` constraint (with the `btree_
 ## Project structure
 
 ```
+.github/
+└── workflows/ci.yml        # CI: types, lint, format, tests and SonarQube analysis
 prisma/
 ├── schema.prisma          # database models
 └── migrations/            # SQL migration history (including CHECK constraints)
@@ -252,6 +288,9 @@ src/
 │   ├── middlewares/       # 404 and error handlers
 │   ├── schemas/           # shared Zod schemas (ids, names, pagination, PATCH helpers)
 │   └── utils/             # helpers: omitUndefined, HH:mm ↔ minutes, clinic time zone ↔ UTC
+├── test/
+│   ├── global-setup.ts    # creates the test database and applies the migrations
+│   └── helpers.ts         # app instance, table reset, data factories and login helpers
 ├── types/
 │   └── express.d.ts       # adds `user` to the Express request type
 └── modules/
@@ -319,7 +358,7 @@ Each module groups its validation schema, types, data access, controller and rou
 3. ~~Authentication and roles~~ ✅
 4. ~~Catalogs: doctors, services and schedules~~ ✅
 5. ~~Appointments and availability~~ ✅
-6. Automated tests (Vitest), CI and code coverage (SonarQube) (in progress)
+6. ~~Automated tests (Vitest), CI and code coverage (SonarQube)~~ ✅
 7. Medical records and audit log
 8. Real-time chat
 9. WhatsApp reminders

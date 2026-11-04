@@ -2,9 +2,13 @@
 
 # Medical API
 
+[![CI](https://github.com/pablobonillaq/medical-api/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/pablobonillaq/medical-api/actions/workflows/ci.yml)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=pablobonillaq_medical-api&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=pablobonillaq_medical-api)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=pablobonillaq_medical-api&metric=coverage)](https://sonarcloud.io/summary/new_code?id=pablobonillaq_medical-api)
+
 API REST para la gestión de una clínica con varios médicos: agenda de citas, expedientes clínicos, chat entre pacientes y clínica, y recordatorios de citas por WhatsApp.
 
-> **Estado:** en desarrollo. Fases 1–5 completadas (configuración base, base de datos, autenticación y roles, catálogos, citas); siguen las pruebas automáticas y la integración continua.
+> **Estado:** en desarrollo. Fases 1–6 completadas (configuración base, base de datos, autenticación y roles, catálogos, citas, pruebas e integración continua); sigue el expediente clínico con registro de auditoría.
 > Proyecto de portafolio. Todos los datos de pruebas son **ficticios**.
 
 ## Funcionalidades
@@ -38,7 +42,9 @@ API REST para la gestión de una clínica con varios médicos: agenda de citas, 
 - **Autenticación:** JWT (jsonwebtoken) en cookies httpOnly, contraseñas hasheadas con bcrypt
 - **Validación:** Zod
 - **Calidad de código:** ESLint (typescript-eslint) y Prettier
-- **Por agregar:** Socket.IO, WhatsApp Cloud API, Vitest
+- **Pruebas:** Vitest, Supertest y cobertura con V8
+- **Integración continua:** GitHub Actions y SonarQube Cloud
+- **Por agregar:** Socket.IO, WhatsApp Cloud API
 
 ## Requisitos
 
@@ -82,19 +88,47 @@ Los valores de `POSTGRES_*` deben coincidir con el usuario, la contraseña y la 
 
 ## Scripts
 
-| Comando               | Descripción                                                      |
-| --------------------- | ---------------------------------------------------------------- |
-| `npm run dev`         | Inicia el servidor en modo desarrollo con recarga automática     |
-| `npm run typecheck`   | Verifica los tipos con TypeScript                                |
-| `npm run lint`        | Revisa el código con ESLint                                      |
-| `npm run format`      | Formatea el código con Prettier                                  |
-| `npm run check`       | Ejecuta typecheck, lint y la revisión de formato                 |
-| `npm run db:up`       | Levanta el contenedor de PostgreSQL                              |
-| `npm run db:down`     | Detiene el contenedor de PostgreSQL (los datos se conservan)     |
-| `npm run db:migrate`  | Crea y aplica migraciones a partir del schema de Prisma          |
-| `npm run db:generate` | Genera el cliente de Prisma                                      |
-| `npm run db:studio`   | Abre Prisma Studio para ver los datos                            |
-| `npm run db:seed`     | Crea la primera cuenta de admin (se puede ejecutar varias veces) |
+| Comando                 | Descripción                                                             |
+| ----------------------- | ----------------------------------------------------------------------- |
+| `npm run dev`           | Inicia el servidor en modo desarrollo con recarga automática            |
+| `npm run typecheck`     | Verifica los tipos con TypeScript                                       |
+| `npm run lint`          | Revisa el código con ESLint                                             |
+| `npm run format`        | Formatea el código con Prettier                                         |
+| `npm run check`         | Ejecuta typecheck, lint, la revisión de formato y las pruebas unitarias |
+| `npm test`              | Ejecuta todas las pruebas (unitarias y de integración)                  |
+| `npm run test:unit`     | Ejecuta las pruebas unitarias (no necesitan base de datos)              |
+| `npm run test:int`      | Ejecuta las pruebas de integración con la base de datos de pruebas      |
+| `npm run test:watch`    | Ejecuta las pruebas unitarias en modo watch                             |
+| `npm run test:coverage` | Ejecuta todas las pruebas y genera el reporte de cobertura              |
+| `npm run db:up`         | Levanta el contenedor de PostgreSQL                                     |
+| `npm run db:down`       | Detiene el contenedor de PostgreSQL (los datos se conservan)            |
+| `npm run db:migrate`    | Crea y aplica migraciones a partir del schema de Prisma                 |
+| `npm run db:generate`   | Genera el cliente de Prisma                                             |
+| `npm run db:studio`     | Abre Prisma Studio para ver los datos                                   |
+| `npm run db:seed`       | Crea la primera cuenta de admin (se puede ejecutar varias veces)        |
+
+## Pruebas
+
+Las pruebas usan **Vitest** y están junto al código que prueban:
+
+| Tipo        | Archivos               | Qué cubren                                                                                                                     |
+| ----------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Unitarias   | `src/**/*.test.ts`     | Lógica pura: utilidades de hora y zona horaria, cálculo de horarios disponibles, schemas de Zod, reglas de estado de las citas |
+| Integración | `src/**/*.int.test.ts` | Peticiones HTTP con **Supertest** contra una base de datos PostgreSQL real                                                     |
+
+Las pruebas de integración necesitan el contenedor de la base de datos encendido (`npm run db:up`). Antes de empezar, Vitest crea una base de datos aparte, `medical_api_test`, y le aplica las migraciones, así que los datos de desarrollo nunca se tocan. Cada prueba empieza con las tablas vacías.
+
+Las pruebas de integración también verifican las reglas de la base de datos directamente; por ejemplo, que dos peticiones que agendan el mismo horario al mismo tiempo terminen con un `201` y un `409`.
+
+```bash
+npm run db:up
+npm test               # unitarias + integración
+npm run test:coverage  # reporte en coverage/index.html
+```
+
+### Integración continua
+
+En cada push a `master` y en cada pull request, [GitHub Actions](.github/workflows/ci.yml) levanta un servicio de PostgreSQL 18 y ejecuta la verificación de tipos, ESLint, la revisión de Prettier y todas las pruebas con cobertura. Después envía el reporte de cobertura a **SonarQube Cloud**, que evalúa el Quality Gate (bugs, vulnerabilidades, code smells, duplicación y cobertura del código nuevo).
 
 ## Endpoints
 
@@ -235,6 +269,8 @@ La tabla `appointments` tiene una restricción `EXCLUDE` de PostgreSQL (con la e
 ## Estructura del proyecto
 
 ```
+.github/
+└── workflows/ci.yml        # CI: tipos, lint, formato, pruebas y análisis de SonarQube
 prisma/
 ├── schema.prisma          # modelos de la base de datos
 └── migrations/            # historial de migraciones en SQL (incluye restricciones CHECK)
@@ -252,6 +288,9 @@ src/
 │   ├── middlewares/       # manejadores de 404 y de errores
 │   ├── schemas/           # schemas de Zod compartidos (ids, nombres, paginación, ayudas para PATCH)
 │   └── utils/             # utilidades: omitUndefined, HH:mm ↔ minutos, zona horaria de la clínica ↔ UTC
+├── test/
+│   ├── global-setup.ts    # crea la base de datos de pruebas y aplica las migraciones
+│   └── helpers.ts         # instancia de la app, limpieza de tablas, fábricas de datos y login
 ├── types/
 │   └── express.d.ts       # agrega `user` al tipo Request de Express
 └── modules/
@@ -319,7 +358,7 @@ Cada módulo agrupa su schema de validación, tipos, acceso a datos, controlador
 3. ~~Autenticación y roles~~ ✅
 4. ~~Catálogos: médicos, servicios y horarios~~ ✅
 5. ~~Citas y disponibilidad~~ ✅
-6. Pruebas automáticas (Vitest), integración continua y cobertura de código (SonarQube) (en curso)
+6. ~~Pruebas automáticas (Vitest), integración continua y cobertura de código (SonarQube)~~ ✅
 7. Expedientes clínicos y auditoría
 8. Chat en tiempo real
 9. Recordatorios por WhatsApp
