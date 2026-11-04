@@ -9,7 +9,9 @@ export default defineConfig(
   {
     languageOptions: {
       parserOptions: {
-        projectService: { allowDefaultProject: ['eslint.config.js', 'prisma7.config.ts'] },
+        projectService: {
+          allowDefaultProject: ['eslint.config.js', 'prisma7.config.ts', 'vitest.config.ts'],
+        },
         tsconfigRootDir: import.meta.dirname,
       },
     },
