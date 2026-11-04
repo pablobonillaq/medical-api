@@ -5,6 +5,8 @@ import {
   cancelAppointmentSchema,
   createAppointmentSchema,
   listAppointmentsQuerySchema,
+  rescheduleAppointmentSchema,
+  updateAppointmentStatusSchema,
 } from './appointments.schema.js'
 import { appointmentsService } from './appointments.service.js'
 
@@ -37,4 +39,20 @@ const cancel: RequestHandler = async (req, res) => {
   res.json({ appointment })
 }
 
-export const appointmentsController = { create, list, getById, cancel }
+const reschedule: RequestHandler = async (req, res) => {
+  if (!req.user) throw new UnauthorizedError()
+  const { id } = idParamsSchema.parse(req.params)
+  const { startsAt } = rescheduleAppointmentSchema.parse(req.body)
+  const appointment = await appointmentsService.reschedule(id, startsAt, req.user)
+  res.json({ appointment })
+}
+
+const updateStatus: RequestHandler = async (req, res) => {
+  if (!req.user) throw new UnauthorizedError()
+  const { id } = idParamsSchema.parse(req.params)
+  const input = updateAppointmentStatusSchema.parse(req.body)
+  const appointment = await appointmentsService.updateStatus(id, input, req.user)
+  res.json({ appointment })
+}
+
+export const appointmentsController = { create, list, getById, cancel, reschedule, updateStatus }

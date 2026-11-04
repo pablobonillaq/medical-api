@@ -15,7 +15,11 @@ import type { AvailabilityQuery } from './appointments.schema.js'
 import { computeSlots } from './availability.js'
 
 export const availabilityService = {
-  async getSlots({ doctorId, serviceId, date }: AvailabilityQuery) {
+  // excludeAppointmentId: when rescheduling, the appointment's own time does not count as busy
+  async getSlots(
+    { doctorId, serviceId, date }: AvailabilityQuery,
+    { excludeAppointmentId }: { excludeAppointmentId?: string } = {},
+  ) {
     const timeZone = env.CLINIC_TIMEZONE
     const now = new Date()
 
@@ -39,7 +43,12 @@ export const availabilityService = {
     const [blocks, timeOff, appointments] = await Promise.all([
       schedulesRepository.findBlocksForDay(doctorId, getIsoDayOfWeek(date)),
       schedulesRepository.findTimeOffBetween(doctorId, dayStart, dayEnd),
-      appointmentsRepository.findActiveForDoctorBetween(doctorId, dayStart, dayEnd),
+      appointmentsRepository.findActiveForDoctorBetween(
+        doctorId,
+        dayStart,
+        dayEnd,
+        excludeAppointmentId,
+      ),
     ])
 
     const busy = [

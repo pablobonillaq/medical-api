@@ -34,6 +34,18 @@ export const cancelAppointmentSchema = z.object({
     .optional(),
 })
 
+export const rescheduleAppointmentSchema = z.object({
+  startsAt: isoDateTimeSchema,
+})
+
+// "cancelled" is not here: cancelling has its own endpoint
+export const updateAppointmentStatusSchema = z.object({
+  status: z.enum(['confirmed', 'completed', 'no_show'], {
+    error: 'status must be confirmed, completed or no_show',
+  }),
+})
+
 export type AvailabilityQuery = z.infer<typeof availabilityQuerySchema>
 export type CreateAppointmentInput = z.infer<typeof createAppointmentSchema>
 export type ListAppointmentsQuery = z.infer<typeof listAppointmentsQuerySchema>
+export type UpdateAppointmentStatusInput = z.infer<typeof updateAppointmentStatusSchema>

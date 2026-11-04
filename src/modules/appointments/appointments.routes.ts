@@ -14,3 +14,9 @@ appointmentsRouter.post(
 appointmentsRouter.get('/', appointmentsController.list)
 appointmentsRouter.get('/:id', appointmentsController.getById)
 appointmentsRouter.patch('/:id/cancel', appointmentsController.cancel)
+appointmentsRouter.patch(
+  '/:id/reschedule',
+  requireRole('patient', 'employee', 'admin'),
+  appointmentsController.reschedule,
+)
+appointmentsRouter.patch('/:id/status', appointmentsController.updateStatus)
