@@ -24,4 +24,13 @@ export default defineConfig(
       ],
     },
   },
+  {
+    // Test files read HTTP responses, whose body is typed as any
+    files: ['src/**/*.test.ts'],
+    rules: {
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+    },
+  },
 )
