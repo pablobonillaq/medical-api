@@ -16,6 +16,12 @@ export const schedulesRepository = {
       orderBy: [{ dayOfWeek: 'asc' }, { startMinute: 'asc' }],
     }),
 
+  findBlocksForDay: (doctorId: string, dayOfWeek: number) =>
+    prisma.scheduleBlock.findMany({
+      where: { doctorId, dayOfWeek },
+      orderBy: { startMinute: 'asc' },
+    }),
+
   // Replaces the whole weekly schedule: both operations succeed or neither does
   replaceBlocks: (doctorId: string, blocks: BlockData[]) =>
     prisma.$transaction([
@@ -33,6 +39,11 @@ export const schedulesRepository = {
   findOverlappingTimeOff: (doctorId: string, startsAt: Date, endsAt: Date) =>
     prisma.timeOff.findFirst({
       where: { doctorId, startsAt: { lt: endsAt }, endsAt: { gt: startsAt } },
+    }),
+
+  findTimeOffBetween: (doctorId: string, from: Date, to: Date) =>
+    prisma.timeOff.findMany({
+      where: { doctorId, startsAt: { lt: to }, endsAt: { gt: from } },
     }),
 
   createTimeOff: (data: {
