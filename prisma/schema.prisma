@@ -28,9 +28,12 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  doctor Doctor?
-  patient Patient?
-  createdAppointments Appointment[]
+  doctor                Doctor?
+  patient               Patient?
+  createdAppointments   Appointment[]
+  medicalHistoryUpdates MedicalHistory[]
+  auditLogs             AuditLog[]
+
   @@map("users")
 }
 
@@ -44,11 +47,12 @@ model Doctor {
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  user     User            @relation(fields: [userId], references: [id], onDelete: Restrict)
-  services DoctorService[]
-  schedule ScheduleBlock[]
-  timeOff  TimeOff[]
-  appointments Appointment[]
+  user          User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  services      DoctorService[]
+  schedule      ScheduleBlock[]
+  timeOff       TimeOff[]
+  appointments  Appointment[]
+  clinicalNotes ClinicalNote[]
 
   @@map("doctors")
 }
@@ -62,7 +66,7 @@ model Service {
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  doctors DoctorService[]
+  doctors      DoctorService[]
   appointments Appointment[]
 
   @@map("services")
@@ -118,8 +122,11 @@ model Patient {
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  user User? @relation(fields: [userId], references: [id], onDelete: Restrict)
-  appointments Appointment[]
+  user           User?           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  appointments   Appointment[]
+  medicalHistory MedicalHistory?
+  clinicalNotes  ClinicalNote[]
+  auditLogs      AuditLog[]
 
   @@index([lastName, firstName])
   @@map("patients")
@@ -148,12 +155,92 @@ model Appointment {
   createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt          DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
-  doctor    Doctor  @relation(fields: [doctorId], references: [id], onDelete: Restrict)
-  service   Service @relation(fields: [serviceId], references: [id], onDelete: Restrict)
-  createdBy User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  patient      Patient       @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  doctor       Doctor        @relation(fields: [doctorId], references: [id], onDelete: Restrict)
+  service      Service       @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  createdBy    User?         @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  clinicalNote ClinicalNote?
 
   @@index([doctorId, startsAt])
   @@index([patientId, startsAt])
   @@map("appointments")
+}
+
+// Current state of the patient's background; every change is recorded in the audit log
+model MedicalHistory {
+  id                 String   @id @default(uuid(7)) @db.Uuid
+  patientId          String   @unique @map("patient_id") @db.Uuid
+  bloodType          String?  @map("blood_type")
+  allergies          String?
+  chronicConditions  String?  @map("chronic_conditions")
+  currentMedications String?  @map("current_medications")
+  surgicalHistory    String?  @map("surgical_history")
+  familyHistory      String?  @map("family_history")
+  updatedById        String   @map("updated_by_id") @db.Uuid
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  updatedBy User    @relation(fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@map("medical_histories")
+}
+
+// SOAP note. Append-only: mistakes are fixed with an amendment (a new note pointing to the original)
+model ClinicalNote {
+  id              String   @id @default(uuid(7)) @db.Uuid
+  patientId       String   @map("patient_id") @db.Uuid
+  doctorId        String   @map("doctor_id") @db.Uuid
+  appointmentId   String?  @unique @map("appointment_id") @db.Uuid
+  amendsNoteId    String?  @map("amends_note_id") @db.Uuid
+  amendmentReason String?  @map("amendment_reason")
+  subjective      String
+  objective       String?
+  assessment      String
+  plan            String
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  patient     Patient        @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  doctor      Doctor         @relation(fields: [doctorId], references: [id], onDelete: Restrict)
+  appointment Appointment?   @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  amends      ClinicalNote?  @relation("NoteAmendments", fields: [amendsNoteId], references: [id], onDelete: Restrict)
+  amendments  ClinicalNote[] @relation("NoteAmendments")
+
+  @@index([patientId, createdAt])
+  @@index([amendsNoteId])
+  @@map("clinical_notes")
+}
+
+enum AuditAction {
+  read
+  create
+  update
+  denied
+}
+
+enum AuditResource {
+  medical_history
+  clinical_note
+}
+
+// Who accessed which record and when. Metadata only, never clinical content. Append-only
+model AuditLog {
+  id         String        @id @default(uuid(7)) @db.Uuid
+  actorId    String        @map("actor_id") @db.Uuid
+  actorRole  Role          @map("actor_role")
+  action     AuditAction
+  resource   AuditResource
+  resourceId String?       @map("resource_id") @db.Uuid
+  patientId  String        @map("patient_id") @db.Uuid
+  ip         String?
+  userAgent  String?       @map("user_agent")
+  details    Json?
+  createdAt  DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  actor   User    @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+
+  @@index([patientId, createdAt])
+  @@index([actorId, createdAt])
+  @@map("audit_logs")
 }
