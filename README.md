@@ -8,7 +8,7 @@
 
 REST API for managing a multi-doctor clinic: appointment scheduling, electronic medical records, patient–clinic chat, and appointment reminders via WhatsApp.
 
-> **Status:** in development. Phases 1–6 completed (base setup, database, authentication and roles, catalogs, appointments, tests and CI); next: medical records and audit log.
+> **Status:** in development. Phases 1–7 completed (base setup, database, authentication and roles, catalogs, appointments, tests and CI, medical records and audit log); next: real-time chat.
 > Portfolio project. All test data is **fictitious**.
 
 ## Features
@@ -17,8 +17,8 @@ REST API for managing a multi-doctor clinic: appointment scheduling, electronic 
 - [x] Management of doctors, services, schedules and days off
 - [x] Patient profiles: self-registration or front-desk registration, search and pagination
 - [x] Appointment scheduling: availability, booking, cancelling and rescheduling, with no double booking
-- [ ] Medical records: medical history and append-only clinical notes (never edited or deleted)
-- [ ] Audit log of every access to medical records
+- [x] Medical records: medical history and append-only clinical notes (never edited or deleted)
+- [x] Audit log of every access to medical records
 - [ ] Real-time chat between patients and the clinic
 - [ ] Appointment reminders via WhatsApp
 - [ ] File attachments (lab results, images)
@@ -187,13 +187,14 @@ Days go from `1` (Monday) to `7` (Sunday). Times use `HH:mm` in the clinic's loc
 
 ### Patients
 
-| Method  | Path            | Access                         | Description                                                                                                                                                          |
-| ------- | --------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET`   | `/patients/me`  | Patient                        | Returns the patient's own profile                                                                                                                                    |
-| `GET`   | `/patients`     | Admin or employee              | Paginated search: `?search=` (name in any order, or 4+ digits of the phone), `?page=` and `?pageSize=` (max 100). Returns `patients`, `page`, `pageSize` and `total` |
-| `POST`  | `/patients`     | Admin or employee              | Registers a patient without an account (e.g. by phone)                                                                                                               |
-| `GET`   | `/patients/:id` | Admin, employee or the patient | Returns a patient. Other patients get `404`, so ids are not revealed                                                                                                 |
-| `PATCH` | `/patients/:id` | Employee or the patient        | Updates the profile. Admins cannot edit patient data                                                                                                                 |
+| Method  | Path                      | Access                         | Description                                                                                                                                                          |
+| ------- | ------------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`   | `/patients/me`            | Patient                        | Returns the patient's own profile                                                                                                                                    |
+| `GET`   | `/patients/me/access-log` | Patient                        | Who opened the patient's medical record and when (staff name and role only). Paginated                                                                               |
+| `GET`   | `/patients`               | Admin or employee              | Paginated search: `?search=` (name in any order, or 4+ digits of the phone), `?page=` and `?pageSize=` (max 100). Returns `patients`, `page`, `pageSize` and `total` |
+| `POST`  | `/patients`               | Admin or employee              | Registers a patient without an account (e.g. by phone)                                                                                                               |
+| `GET`   | `/patients/:id`           | Admin, employee or the patient | Returns a patient. Other patients get `404`, so ids are not revealed                                                                                                 |
+| `PATCH` | `/patients/:id`           | Employee or the patient        | Updates the profile. Admins cannot edit patient data                                                                                                                 |
 
 Phones are accepted as `55 1234 5678`, `(55) 1234-5678` or `+52…` and always stored in E.164 format (`+525512345678`), as WhatsApp requires. `birthDate` uses `YYYY-MM-DD`. `whatsappOptIn` records the patient's consent to receive reminders and defaults to `false`.
 
@@ -243,24 +244,51 @@ Patients (or staff) confirm upcoming appointments; doctors (or staff) record `co
 
 Each appointment includes `startsAt` and `endsAt` in UTC plus `date` and `time` in the clinic's local time. If two requests book the same slot at the same moment, the database accepts one and the other gets `409`.
 
+### Medical records
+
+| Method | Path                                            | Access                         | Description                                                                                                                                                                                       |
+| ------ | ----------------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/patients/:patientId/medical-history`          | Treating doctor or the patient | Returns the medical history (`null` if there is none yet)                                                                                                                                         |
+| `PUT`  | `/patients/:patientId/medical-history`          | Treating doctor                | Creates or replaces the whole history: `bloodType`, `allergies`, `chronicConditions`, `currentMedications`, `surgicalHistory`, `familyHistory`. Missing or empty fields are saved as `null`       |
+| `GET`  | `/patients/:patientId/notes`                    | Treating doctor or the patient | Paginated original notes, newest first, each one with its amendments                                                                                                                              |
+| `GET`  | `/patients/:patientId/notes/:noteId`            | Treating doctor or the patient | Returns a note with its amendments                                                                                                                                                                |
+| `POST` | `/patients/:patientId/notes`                    | Treating doctor                | Creates a SOAP note (`subjective`, `objective`, `assessment`, `plan`), optionally linked to one of the doctor's appointments with the patient (`appointmentId`). One note per appointment (`409`) |
+| `POST` | `/patients/:patientId/notes/:noteId/amendments` | Author of the note             | Corrects a note: the full corrected note plus a `reason`. The original never changes                                                                                                              |
+
+- A **treating doctor** has at least one appointment with the patient that was not cancelled. Admins and employees never see clinical content.
+- Anyone else gets `404`, so the API does not reveal which patients exist. A patient who tries to change their record gets `403`.
+- Notes cannot be edited or deleted. Amendments always point to the original note, and only its author can add them.
+- Every read, change and denied attempt is saved in the audit log. A change and its audit entry are saved in the same transaction.
+
+### Audit log
+
+| Method | Path          | Access | Description                                                                                                                                                                      |
+| ------ | ------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/audit-logs` | Admin  | Paginated entries, newest first. Filters: `patientId`, `actorId`, `action` (`read`, `create`, `update`, `denied`), `resource` (`medical_history`, `clinical_note`), `from`, `to` |
+
+Each entry stores who (user and role at that moment), what (action, resource and id), which patient, when, the IP and the browser. `details` only holds metadata, such as the names of the changed fields or the ids of the notes that were read, never clinical content.
+
 Requests without a valid session return `401`; requests from a role without permission return `403`. A disabled account loses access immediately.
 
 Errors are returned as `{ "error": "message" }`. Validation errors (`400`) also include `details` with `fieldErrors` (messages for each field) and `formErrors` (errors about the request as a whole).
 
 ## Data model
 
-| Table             | Description                                                                                                                                                              |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `users`           | Accounts: email, password hash, role and `active` status                                                                                                                 |
-| `doctors`         | Doctor profile (1:1 with `users`): name, specialty and unique license number                                                                                             |
-| `services`        | Services offered by the clinic, with their duration in minutes                                                                                                           |
-| `doctor_services` | Many-to-many relation: which services each doctor offers                                                                                                                 |
-| `schedule_blocks` | Weekly schedule: day (1 = Monday … 7 = Sunday) and start/end in minutes since midnight, clinic time                                                                      |
-| `patients`        | Patient profile: name, birth date, phone (E.164) and WhatsApp consent. The user account is optional                                                                      |
-| `time_off`        | Days off and absences of each doctor (exact start and end timestamps)                                                                                                    |
-| `appointments`    | Appointments: patient, doctor, service, start and end (UTC), status (`scheduled`, `confirmed`, `cancelled`, `completed`, `no_show`) and cancellation data. Never deleted |
+| Table               | Description                                                                                                                                                              |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `users`             | Accounts: email, password hash, role and `active` status                                                                                                                 |
+| `doctors`           | Doctor profile (1:1 with `users`): name, specialty and unique license number                                                                                             |
+| `services`          | Services offered by the clinic, with their duration in minutes                                                                                                           |
+| `doctor_services`   | Many-to-many relation: which services each doctor offers                                                                                                                 |
+| `schedule_blocks`   | Weekly schedule: day (1 = Monday … 7 = Sunday) and start/end in minutes since midnight, clinic time                                                                      |
+| `patients`          | Patient profile: name, birth date, phone (E.164) and WhatsApp consent. The user account is optional                                                                      |
+| `time_off`          | Days off and absences of each doctor (exact start and end timestamps)                                                                                                    |
+| `appointments`      | Appointments: patient, doctor, service, start and end (UTC), status (`scheduled`, `confirmed`, `cancelled`, `completed`, `no_show`) and cancellation data. Never deleted |
+| `medical_histories` | Medical history of each patient (1:1): blood type, allergies, chronic conditions, medications, surgical and family history, and who last updated it                      |
+| `clinical_notes`    | SOAP notes, optionally linked to an appointment (one note per appointment). Amendments are new rows that point to the original note. Append-only                         |
+| `audit_logs`        | Who accessed or changed which medical record and when, including denied attempts. Metadata only. Append-only                                                             |
 
-Besides the validation in the API, the database enforces its own rules with `CHECK` constraints (service durations, valid days and hours, time off ranges).
+Besides the validation in the API, the database enforces its own rules with `CHECK` constraints (service durations, valid days and hours, time off ranges, blood types and amendment rules). `clinical_notes` and `audit_logs` are **append-only**: a trigger rejects any `UPDATE` or `DELETE`, so not even a bug or a manual query can alter a note or the audit log.
 
 ### Double booking prevention
 
@@ -307,6 +335,13 @@ src/
     │   ├── availability.routes.ts
     │   ├── availability.service.ts    # loads schedule, time off and appointments in parallel
     │   └── availability.ts            # computeSlots: pure function, no database access
+    ├── audit/
+    │   ├── audit.controller.ts
+    │   ├── audit.repository.ts
+    │   ├── audit.routes.ts        # GET /audit-logs (admin)
+    │   ├── audit.schema.ts        # filters: patient, user, action, resource, dates
+    │   ├── audit.service.ts       # record() (can run inside a transaction), admin log, patient access log
+    │   └── audit.types.ts         # request context and responses without clinical content
     ├── auth/
     │   ├── auth.constants.ts
     │   ├── auth.controller.ts
@@ -322,6 +357,17 @@ src/
     │   └── doctors.types.ts       # response mapping
     ├── health/
     │   └── health.routes.ts
+    ├── medical-records/
+    │   ├── clinical-notes.controller.ts
+    │   ├── clinical-notes.service.ts     # SOAP notes, one per appointment, amendments by the author
+    │   ├── medical-history.controller.ts
+    │   ├── medical-history.service.ts    # PUT replaces the history; audits changed field names
+    │   ├── medical-records.access.ts     # who can open a record (patient or treating doctor)
+    │   ├── medical-records.constants.ts
+    │   ├── medical-records.repository.ts
+    │   ├── medical-records.routes.ts     # mounted under /patients/:patientId
+    │   ├── medical-records.schema.ts
+    │   └── medical-records.types.ts
     ├── patients/
     │   ├── patients.controller.ts
     │   ├── patients.repository.ts   # search and pagination
@@ -359,7 +405,7 @@ Each module groups its validation schema, types, data access, controller and rou
 4. ~~Catalogs: doctors, services and schedules~~ ✅
 5. ~~Appointments and availability~~ ✅
 6. ~~Automated tests (Vitest), CI and code coverage (SonarQube)~~ ✅
-7. Medical records and audit log
+7. ~~Medical records and audit log~~ ✅
 8. Real-time chat
 9. WhatsApp reminders
 10. File attachments

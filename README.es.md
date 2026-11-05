@@ -8,7 +8,7 @@
 
 API REST para la gestión de una clínica con varios médicos: agenda de citas, expedientes clínicos, chat entre pacientes y clínica, y recordatorios de citas por WhatsApp.
 
-> **Estado:** en desarrollo. Fases 1–6 completadas (configuración base, base de datos, autenticación y roles, catálogos, citas, pruebas e integración continua); sigue el expediente clínico con registro de auditoría.
+> **Estado:** en desarrollo. Fases 1–7 completadas (configuración base, base de datos, autenticación y roles, catálogos, citas, pruebas e integración continua, expediente clínico y auditoría); sigue el chat en tiempo real.
 > Proyecto de portafolio. Todos los datos de pruebas son **ficticios**.
 
 ## Funcionalidades
@@ -17,8 +17,8 @@ API REST para la gestión de una clínica con varios médicos: agenda de citas, 
 - [x] Gestión de médicos, servicios, horarios y días no laborables
 - [x] Perfiles de pacientes: registro propio o por recepción, búsqueda y paginación
 - [x] Agenda de citas: disponibilidad, agendar, cancelar y reprogramar, sin doble agendado
-- [ ] Expediente clínico: antecedentes y notas clínicas que no se editan ni se borran
-- [ ] Registro de auditoría de cada acceso a expedientes
+- [x] Expediente clínico: antecedentes y notas clínicas que no se editan ni se borran
+- [x] Registro de auditoría de cada acceso a expedientes
 - [ ] Chat en tiempo real entre pacientes y clínica
 - [ ] Recordatorios de citas por WhatsApp
 - [ ] Archivos adjuntos (estudios de laboratorio, imágenes)
@@ -187,13 +187,14 @@ Los días van de `1` (lunes) a `7` (domingo). Las horas usan `HH:mm` en hora loc
 
 ### Pacientes
 
-| Método  | Ruta            | Acceso                        | Descripción                                                                                                                                                                        |
-| ------- | --------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET`   | `/patients/me`  | Paciente                      | Devuelve el perfil del propio paciente                                                                                                                                             |
-| `GET`   | `/patients`     | Admin o empleado              | Búsqueda paginada: `?search=` (nombre en cualquier orden, o 4 o más dígitos del teléfono), `?page=` y `?pageSize=` (máximo 100). Devuelve `patients`, `page`, `pageSize` y `total` |
-| `POST`  | `/patients`     | Admin o empleado              | Registra un paciente sin cuenta (por ejemplo, por teléfono)                                                                                                                        |
-| `GET`   | `/patients/:id` | Admin, empleado o el paciente | Devuelve un paciente. Para otros pacientes responde `404`, así no se revelan ids                                                                                                   |
-| `PATCH` | `/patients/:id` | Empleado o el paciente        | Actualiza el perfil. El admin no puede editar datos de pacientes                                                                                                                   |
+| Método  | Ruta                      | Acceso                        | Descripción                                                                                                                                                                        |
+| ------- | ------------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`   | `/patients/me`            | Paciente                      | Devuelve el perfil del propio paciente                                                                                                                                             |
+| `GET`   | `/patients/me/access-log` | Paciente                      | Quién consultó el expediente del paciente y cuándo (solo nombre y rol del personal). Paginado                                                                                      |
+| `GET`   | `/patients`               | Admin o empleado              | Búsqueda paginada: `?search=` (nombre en cualquier orden, o 4 o más dígitos del teléfono), `?page=` y `?pageSize=` (máximo 100). Devuelve `patients`, `page`, `pageSize` y `total` |
+| `POST`  | `/patients`               | Admin o empleado              | Registra un paciente sin cuenta (por ejemplo, por teléfono)                                                                                                                        |
+| `GET`   | `/patients/:id`           | Admin, empleado o el paciente | Devuelve un paciente. Para otros pacientes responde `404`, así no se revelan ids                                                                                                   |
+| `PATCH` | `/patients/:id`           | Empleado o el paciente        | Actualiza el perfil. El admin no puede editar datos de pacientes                                                                                                                   |
 
 El teléfono se acepta como `55 1234 5678`, `(55) 1234-5678` o `+52…` y siempre se guarda en formato E.164 (`+525512345678`), como lo exige WhatsApp. `birthDate` usa `AAAA-MM-DD`. `whatsappOptIn` guarda el consentimiento del paciente para recibir recordatorios y por defecto es `false`.
 
@@ -243,24 +244,51 @@ El paciente (o el personal) confirma las citas futuras; el médico (o el persona
 
 Cada cita incluye `startsAt` y `endsAt` en UTC, y `date` y `time` en hora local de la clínica. Si dos peticiones agendan el mismo horario en el mismo momento, la base de datos acepta una y la otra recibe `409`.
 
+### Expediente clínico
+
+| Método | Ruta                                            | Acceso                        | Descripción                                                                                                                                                                                           |
+| ------ | ----------------------------------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/patients/:patientId/medical-history`          | Médico tratante o el paciente | Devuelve los antecedentes (`null` si todavía no hay)                                                                                                                                                  |
+| `PUT`  | `/patients/:patientId/medical-history`          | Médico tratante               | Crea o reemplaza todos los antecedentes: `bloodType`, `allergies`, `chronicConditions`, `currentMedications`, `surgicalHistory`, `familyHistory`. Los campos ausentes o vacíos se guardan como `null` |
+| `GET`  | `/patients/:patientId/notes`                    | Médico tratante o el paciente | Notas originales paginadas, de la más reciente a la más antigua, cada una con sus enmiendas                                                                                                           |
+| `GET`  | `/patients/:patientId/notes/:noteId`            | Médico tratante o el paciente | Devuelve una nota con sus enmiendas                                                                                                                                                                   |
+| `POST` | `/patients/:patientId/notes`                    | Médico tratante               | Crea una nota SOAP (`subjective`, `objective`, `assessment`, `plan`), opcionalmente ligada a una cita del médico con el paciente (`appointmentId`). Una nota por cita (`409`)                         |
+| `POST` | `/patients/:patientId/notes/:noteId/amendments` | Autor de la nota              | Corrige una nota: la nota corregida completa más un `reason`. La original nunca cambia                                                                                                                |
+
+- Un **médico tratante** tiene al menos una cita no cancelada con el paciente. Los administradores y empleados nunca ven contenido clínico.
+- Cualquier otro usuario recibe `404`, así la API no revela qué pacientes existen. Si un paciente intenta modificar su expediente recibe `403`.
+- Las notas no se editan ni se borran. Las enmiendas siempre apuntan a la nota original y solo su autor puede agregarlas.
+- Cada lectura, cambio e intento denegado se guarda en la bitácora de auditoría. Un cambio y su registro de auditoría se guardan en la misma transacción.
+
+### Bitácora de auditoría
+
+| Método | Ruta          | Acceso | Descripción                                                                                                                                                                                           |
+| ------ | ------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/audit-logs` | Admin  | Registros paginados, del más reciente al más antiguo. Filtros: `patientId`, `actorId`, `action` (`read`, `create`, `update`, `denied`), `resource` (`medical_history`, `clinical_note`), `from`, `to` |
+
+Cada registro guarda quién (usuario y su rol en ese momento), qué (acción, recurso e id), de qué paciente, cuándo, la IP y el navegador. `details` solo contiene metadatos, como los nombres de los campos que cambiaron o los ids de las notas consultadas, nunca contenido clínico.
+
 Las peticiones sin una sesión válida responden `401`; las de un rol sin permiso responden `403`. Una cuenta desactivada pierde el acceso de inmediato.
 
 Los errores se devuelven como `{ "error": "mensaje" }`. Los errores de validación (`400`) incluyen además `details` con `fieldErrors` (mensajes de cada campo) y `formErrors` (errores de la petición en conjunto).
 
 ## Modelo de datos
 
-| Tabla             | Descripción                                                                                                                                                           |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `users`           | Cuentas: email, hash de la contraseña, rol y estado `active`                                                                                                          |
-| `doctors`         | Perfil del médico (1:1 con `users`): nombre, especialidad y cédula profesional única                                                                                  |
-| `services`        | Servicios que ofrece la clínica, con su duración en minutos                                                                                                           |
-| `doctor_services` | Relación muchos a muchos: qué servicios ofrece cada médico                                                                                                            |
-| `schedule_blocks` | Horario semanal: día (1 = lunes … 7 = domingo) e inicio/fin en minutos desde la medianoche, hora de la clínica                                                        |
-| `patients`        | Perfil del paciente: nombre, fecha de nacimiento, teléfono (E.164) y consentimiento de WhatsApp. La cuenta de usuario es opcional                                     |
-| `time_off`        | Días libres y ausencias de cada médico (fecha y hora exactas de inicio y fin)                                                                                         |
-| `appointments`    | Citas: paciente, médico, servicio, inicio y fin (UTC), estado (`scheduled`, `confirmed`, `cancelled`, `completed`, `no_show`) y datos de cancelación. Nunca se borran |
+| Tabla               | Descripción                                                                                                                                                                     |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `users`             | Cuentas: email, hash de la contraseña, rol y estado `active`                                                                                                                    |
+| `doctors`           | Perfil del médico (1:1 con `users`): nombre, especialidad y cédula profesional única                                                                                            |
+| `services`          | Servicios que ofrece la clínica, con su duración en minutos                                                                                                                     |
+| `doctor_services`   | Relación muchos a muchos: qué servicios ofrece cada médico                                                                                                                      |
+| `schedule_blocks`   | Horario semanal: día (1 = lunes … 7 = domingo) e inicio/fin en minutos desde la medianoche, hora de la clínica                                                                  |
+| `patients`          | Perfil del paciente: nombre, fecha de nacimiento, teléfono (E.164) y consentimiento de WhatsApp. La cuenta de usuario es opcional                                               |
+| `time_off`          | Días libres y ausencias de cada médico (fecha y hora exactas de inicio y fin)                                                                                                   |
+| `appointments`      | Citas: paciente, médico, servicio, inicio y fin (UTC), estado (`scheduled`, `confirmed`, `cancelled`, `completed`, `no_show`) y datos de cancelación. Nunca se borran           |
+| `medical_histories` | Antecedentes de cada paciente (1:1): tipo de sangre, alergias, enfermedades crónicas, medicamentos, antecedentes quirúrgicos y familiares, y quién los actualizó por última vez |
+| `clinical_notes`    | Notas SOAP, opcionalmente ligadas a una cita (una nota por cita). Las enmiendas son filas nuevas que apuntan a la nota original. Solo se agregan filas                          |
+| `audit_logs`        | Quién consultó o modificó qué expediente y cuándo, incluidos los intentos denegados. Solo metadatos. Solo se agregan filas                                                      |
 
-Además de la validación en la API, la base de datos aplica sus propias reglas con restricciones `CHECK` (duración de los servicios, días y horas válidos, rangos de días libres).
+Además de la validación en la API, la base de datos aplica sus propias reglas con restricciones `CHECK` (duración de los servicios, días y horas válidos, rangos de días libres, tipos de sangre y reglas de las enmiendas). En `clinical_notes` y `audit_logs` **solo se agregan filas**: un trigger rechaza cualquier `UPDATE` o `DELETE`, así que ni un bug ni una consulta manual pueden alterar una nota o la bitácora.
 
 ### Prevención del doble agendado
 
@@ -307,6 +335,13 @@ src/
     │   ├── availability.routes.ts
     │   ├── availability.service.ts    # carga horario, días libres y citas en paralelo
     │   └── availability.ts            # computeSlots: función pura, sin acceso a la base de datos
+    ├── audit/
+    │   ├── audit.controller.ts
+    │   ├── audit.repository.ts
+    │   ├── audit.routes.ts        # GET /audit-logs (admin)
+    │   ├── audit.schema.ts        # filtros: paciente, usuario, acción, recurso, fechas
+    │   ├── audit.service.ts       # record() (puede ir dentro de una transacción), bitácora del admin y del paciente
+    │   └── audit.types.ts         # contexto de la petición y respuestas sin contenido clínico
     ├── auth/
     │   ├── auth.constants.ts
     │   ├── auth.controller.ts
@@ -322,6 +357,17 @@ src/
     │   └── doctors.types.ts       # formato de la respuesta
     ├── health/
     │   └── health.routes.ts
+    ├── medical-records/
+    │   ├── clinical-notes.controller.ts
+    │   ├── clinical-notes.service.ts     # notas SOAP, una por cita, enmiendas del autor
+    │   ├── medical-history.controller.ts
+    │   ├── medical-history.service.ts    # PUT reemplaza los antecedentes; audita los campos que cambian
+    │   ├── medical-records.access.ts     # quién puede abrir un expediente (paciente o médico tratante)
+    │   ├── medical-records.constants.ts
+    │   ├── medical-records.repository.ts
+    │   ├── medical-records.routes.ts     # montado bajo /patients/:patientId
+    │   ├── medical-records.schema.ts
+    │   └── medical-records.types.ts
     ├── patients/
     │   ├── patients.controller.ts
     │   ├── patients.repository.ts   # búsqueda y paginación
@@ -359,7 +405,7 @@ Cada módulo agrupa su schema de validación, tipos, acceso a datos, controlador
 4. ~~Catálogos: médicos, servicios y horarios~~ ✅
 5. ~~Citas y disponibilidad~~ ✅
 6. ~~Pruebas automáticas (Vitest), integración continua y cobertura de código (SonarQube)~~ ✅
-7. Expedientes clínicos y auditoría
+7. ~~Expedientes clínicos y auditoría~~ ✅
 8. Chat en tiempo real
 9. Recordatorios por WhatsApp
 10. Archivos adjuntos

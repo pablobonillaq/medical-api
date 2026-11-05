@@ -1005,6 +1005,215 @@ Content-Type: application/json
 
 
 # =============================================================================
+# Medical records / Expediente clínico
+# Run the Appointment changes section first: "changeAppointment" makes the
+# doctor one of the patient's treating doctors.
+# Ejecuta antes la sección Appointment changes: "changeAppointment" convierte
+# a la doctora en médica tratante de la paciente.
+# Every request below is saved in the audit log.
+# Cada petición de abajo queda registrada en la bitácora de auditoría.
+# =============================================================================
+
+### Doctor login → 200
+# Login del médico → 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "{{doctorEmail}}", "password": "{{doctorPassword}}" }
+
+### Medical history before it exists → 200 with medicalHistory: null
+# Antecedentes antes de que existan → 200 con medicalHistory: null
+GET {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}/medical-history
+
+### Create the medical history → 200
+# Crear los antecedentes → 200
+PUT {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}/medical-history
+Content-Type: application/json
+
+{
+  "bloodType": "O+",
+  "allergies": "Penicilina",
+  "chronicConditions": "Hipertensión arterial",
+  "currentMedications": "Losartán 50 mg cada 24 horas"
+}
+
+### Replace it (PUT): fields not sent become null → 200
+# Reemplazarlos (PUT): los campos que no se envían quedan en null → 200
+PUT {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}/medical-history
+Content-Type: application/json
+
+{
+  "bloodType": "O+",
+  "allergies": "Penicilina y sulfas",
+  "chronicConditions": "Hipertensión arterial"
+}
+
+### Invalid blood type → 400
+# Tipo de sangre inválido → 400
+PUT {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}/medical-history
+Content-Type: application/json
+
+{ "bloodType": "C+" }
+
+### SOAP note for the appointment → 201
+# Nota SOAP de la cita → 201
+# @name clinicalNote
+POST {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}/notes
+Content-Type: application/json
+
+{
+  "appointmentId": "{{changeAppointment.response.body.$.appointment.id}}",
+  "subjective": "Dolor de garganta desde hace 3 días",
+  "objective": "Faringe hiperémica, temperatura 37.8 °C",
+  "assessment": "Faringitis aguda",
+  "plan": "Paracetamol 500 mg cada 8 horas por 3 días"
+}
+
+### Second note for the same appointment → 409
+# Segunda nota para la misma cita → 409
+POST {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}/notes
+Content-Type: application/json
+
+{
+  "appointmentId": "{{changeAppointment.response.body.$.appointment.id}}",
+  "subjective": "Control",
+  "assessment": "Faringitis aguda",
+  "plan": "Sin cambios"
+}
+
+### Note without assessment and plan → 400
+# Nota sin evaluación ni plan → 400
+POST {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}/notes
+Content-Type: application/json
+
+{ "subjective": "Tos" }
+
+### Amend the note (the original does not change) → 201
+# Enmendar la nota (la original no cambia) → 201
+# @name noteAmendment
+POST {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}/notes/{{clinicalNote.response.body.$.note.id}}/amendments
+Content-Type: application/json
+
+{
+  "subjective": "Dolor de garganta desde hace 3 días",
+  "objective": "Faringe hiperémica, temperatura 37.8 °C",
+  "assessment": "Faringitis aguda",
+  "plan": "Paracetamol 500 mg cada 8 horas por 5 días",
+  "reason": "Duración del tratamiento incorrecta"
+}
+
+### Amend an amendment → 400 (amend the original note)
+# Enmendar una enmienda → 400 (se enmienda la nota original)
+POST {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}/notes/{{noteAmendment.response.body.$.note.id}}/amendments
+Content-Type: application/json
+
+{
+  "subjective": "Dolor de garganta",
+  "assessment": "Faringitis aguda",
+  "plan": "Paracetamol",
+  "reason": "Otra corrección"
+}
+
+### List the notes → 200 (original notes with their amendments)
+# Listar las notas → 200 (notas originales con sus enmiendas)
+GET {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}/notes
+
+### Get one note → 200
+# Ver una nota → 200
+GET {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}/notes/{{clinicalNote.response.body.$.note.id}}
+
+### Other doctor login → 200
+# Login del otro médico → 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "{{otherDoctorEmail}}", "password": "{{otherDoctorPassword}}" }
+
+### A doctor who does not treat the patient → 404 (recorded as denied)
+# Un médico que no atiende a la paciente → 404 (se registra como denied)
+GET {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}/medical-history
+
+### Employee login → 200
+# Login de empleado → 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "{{employeeEmail}}", "password": "{{employeePassword}}" }
+
+### Front desk cannot read clinical notes → 404 (recorded as denied)
+# Recepción no puede leer notas clínicas → 404 (se registra como denied)
+GET {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}/notes
+
+### Patient login → 200
+# Login de paciente → 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "{{patientEmail}}", "password": "{{patientPassword}}" }
+
+### Patient reads their medical history → 200
+# La paciente consulta sus antecedentes → 200
+GET {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}/medical-history
+
+### Patient tries to change it → 403
+# La paciente intenta modificarlos → 403
+PUT {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}/medical-history
+Content-Type: application/json
+
+{ "allergies": "Ninguna" }
+
+### Patient reads their notes → 200
+# La paciente consulta sus notas → 200
+GET {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}/notes
+
+### Who opened my record → 200 (doctors, employee and denied attempts; not my own visits)
+# Quién consultó mi expediente → 200 (médicos, empleado e intentos denegados; no mis propias consultas)
+GET {{baseUrl}}/patients/me/access-log
+
+### Patient tries to browse the audit log → 403
+# La paciente intenta ver la bitácora de auditoría → 403
+GET {{baseUrl}}/audit-logs
+
+
+# =============================================================================
+# Audit log (admin) / Bitácora de auditoría (admin)
+# Run the Medical records section first.
+# Ejecuta antes la sección Medical records.
+# =============================================================================
+
+### Admin login → 200
+# Login como admin → 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "{{adminEmail}}", "password": "{{adminPassword}}" }
+
+### Admin cannot read clinical content → 404 (recorded as denied)
+# El admin no puede leer contenido clínico → 404 (se registra como denied)
+GET {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}/medical-history
+
+### Everything that happened with the patient's record → 200 (newest first)
+# Todo lo que pasó con el expediente de la paciente → 200 (del más reciente al más antiguo)
+GET {{baseUrl}}/audit-logs?patientId={{registerPatient.response.body.$.patient.id}}
+
+### Denied attempts only → 200
+# Solo intentos denegados → 200
+GET {{baseUrl}}/audit-logs?action=denied
+
+### Changes to clinical notes since a date → 200
+# Cambios en notas clínicas desde una fecha → 200
+GET {{baseUrl}}/audit-logs?resource=clinical_note&action=create&from=2026-01-01T00:00:00-06:00
+
+### Invalid action → 400
+# Acción inválida → 400
+GET {{baseUrl}}/audit-logs?action=delete
+
+### "from" after "to" → 400
+# "from" después de "to" → 400
+GET {{baseUrl}}/audit-logs?from=2026-12-31T00:00:00-06:00&to=2026-01-01T00:00:00-06:00
+
+
+# =============================================================================
 # Permissions (patient) / Permisos (paciente)
 # =============================================================================
 

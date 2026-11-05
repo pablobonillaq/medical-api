@@ -9,6 +9,7 @@ import { doctorsRouter } from './modules/doctors/doctors.routes.js'
 import { patientsRouter } from './modules/patients/patients.routes.js'
 import { availabilityRouter } from './modules/appointments/availability.routes.js'
 import { appointmentsRouter } from './modules/appointments/appointments.routes.js'
+import { auditLogsRouter } from './modules/audit/audit.routes.js'
 
 export const createApp = () => {
   const app = express()
@@ -25,6 +26,7 @@ export const createApp = () => {
   app.use('/patients', patientsRouter)
   app.use('/availability', availabilityRouter)
   app.use('/appointments', appointmentsRouter)
+  app.use('/audit-logs', auditLogsRouter)
 
   app.use(notFoundHandler)
   app.use(errorHandler)
