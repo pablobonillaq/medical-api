@@ -33,6 +33,7 @@ model User {
   createdAppointments   Appointment[]
   medicalHistoryUpdates MedicalHistory[]
   auditLogs             AuditLog[]
+  sentMessages          Message[]
 
   @@map("users")
 }
@@ -127,6 +128,7 @@ model Patient {
   medicalHistory MedicalHistory?
   clinicalNotes  ClinicalNote[]
   auditLogs      AuditLog[]
+  conversation   Conversation?
 
   @@index([lastName, firstName])
   @@map("patients")
@@ -243,4 +245,43 @@ model AuditLog {
   @@index([patientId, createdAt])
   @@index([actorId, createdAt])
   @@map("audit_logs")
+}
+
+enum ConversationStatus {
+  open
+  closed
+}
+
+// One conversation per patient with the clinic; the front desk answers it
+model Conversation {
+  id                String             @id @default(uuid(7)) @db.Uuid
+  patientId         String             @unique @map("patient_id") @db.Uuid
+  status            ConversationStatus @default(open)
+  lastMessageAt     DateTime?          @map("last_message_at") @db.Timestamptz(3)
+  patientLastReadAt DateTime?          @map("patient_last_read_at") @db.Timestamptz(3)
+  clinicLastReadAt  DateTime?          @map("clinic_last_read_at") @db.Timestamptz(3)
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  patient  Patient   @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  messages Message[]
+
+  @@index([status, lastMessageAt(sort: Desc)])
+  @@map("conversations")
+}
+
+// Messages are never edited or deleted (append-only, enforced by a trigger)
+model Message {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  conversationId String   @map("conversation_id") @db.Uuid
+  senderId       String   @map("sender_id") @db.Uuid
+  senderRole     Role     @map("sender_role")
+  body           String
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  sender       User         @relation(fields: [senderId], references: [id], onDelete: Restrict)
+
+  @@index([conversationId, id])
+  @@map("messages")
 }

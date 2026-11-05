@@ -19,9 +19,10 @@
     "check": "npm run typecheck && npm run lint && prettier --check . && npm run test:unit",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
-    "db:migrate": "prisma migrate dev && prisma generate",
+    "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:studio": "prisma studio",
+    "postdb:migrate": "prisma generate",
     "postinstall": "prisma generate",
     "db:seed": "tsx src/db/seed.ts"
   },
