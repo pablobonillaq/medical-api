@@ -10,6 +10,7 @@ import { patientsRouter } from './modules/patients/patients.routes.js'
 import { availabilityRouter } from './modules/appointments/availability.routes.js'
 import { appointmentsRouter } from './modules/appointments/appointments.routes.js'
 import { auditLogsRouter } from './modules/audit/audit.routes.js'
+import { chatRouter } from './modules/chat/chat.routes.js'
 
 export const createApp = () => {
   const app = express()
@@ -27,6 +28,8 @@ export const createApp = () => {
   app.use('/availability', availabilityRouter)
   app.use('/appointments', appointmentsRouter)
   app.use('/audit-logs', auditLogsRouter)
+  app.use('/audit-logs', auditLogsRouter)
+  app.use('/conversations', chatRouter)
 
   app.use(notFoundHandler)
   app.use(errorHandler)
