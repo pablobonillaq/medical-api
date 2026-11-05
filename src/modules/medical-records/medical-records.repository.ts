@@ -10,6 +10,21 @@ export type MedicalHistoryWithAuthor = Prisma.MedicalHistoryGetPayload<{
   include: typeof medicalHistoryInclude
 }>
 
+const noteInclude = {
+  doctor: { select: { id: true, firstName: true, lastName: true, specialty: true } },
+} satisfies Prisma.ClinicalNoteInclude
+
+// An original note with its amendments, oldest amendment first
+export const noteWithAmendmentsInclude = {
+  ...noteInclude,
+  amendments: { include: noteInclude, orderBy: { createdAt: 'asc' } },
+} satisfies Prisma.ClinicalNoteInclude
+
+export type ClinicalNoteWithDoctor = Prisma.ClinicalNoteGetPayload<{ include: typeof noteInclude }>
+export type ClinicalNoteWithAmendments = Prisma.ClinicalNoteGetPayload<{
+  include: typeof noteWithAmendmentsInclude
+}>
+
 export const medicalRecordsRepository = {
   findPatientOwner: (patientId: string) =>
     prisma.patient.findUnique({ where: { id: patientId }, select: { id: true, userId: true } }),
@@ -39,4 +54,41 @@ export const medicalRecordsRepository = {
       update: { ...data, updatedById },
       include: medicalHistoryInclude,
     }),
+
+  // One page of original notes (newest first) and the total, read in the same transaction
+  findNotes: (patientId: string, { skip, take }: { skip: number; take: number }) => {
+    const where = { patientId, amendsNoteId: null }
+    return prisma.$transaction([
+      prisma.clinicalNote.findMany({
+        where,
+        include: noteWithAmendmentsInclude,
+        // uuid v7 ids grow with time, so they break ties between notes saved in the same millisecond
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip,
+        take,
+      }),
+      prisma.clinicalNote.count({ where }),
+    ])
+  },
+
+  findNote: (patientId: string, noteId: string) =>
+    prisma.clinicalNote.findFirst({
+      where: { id: noteId, patientId },
+      include: noteWithAmendmentsInclude,
+    }),
+
+  findAppointment: (appointmentId: string) =>
+    prisma.appointment.findUnique({
+      where: { id: appointmentId },
+      select: { doctorId: true, patientId: true, status: true },
+    }),
+
+  noteExistsForAppointment: async (appointmentId: string) =>
+    (await prisma.clinicalNote.findUnique({ where: { appointmentId }, select: { id: true } })) !==
+    null,
+
+  createNote: (
+    data: Prisma.ClinicalNoteUncheckedCreateInput,
+    db: Prisma.TransactionClient = prisma,
+  ) => db.clinicalNote.create({ data, include: noteWithAmendmentsInclude }),
 }

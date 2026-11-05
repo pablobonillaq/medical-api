@@ -10,3 +10,8 @@ export const MEDICAL_HISTORY_TEXT_FIELDS = [
 ] as const
 
 export const MAX_HISTORY_TEXT_LENGTH = 2000
+// A note can document an appointment that took place or is taking place
+export const NOTE_APPOINTMENT_STATUSES = ['scheduled', 'confirmed', 'completed'] as const
+
+export const MAX_NOTE_TEXT_LENGTH = 5000
+export const MAX_AMENDMENT_REASON_LENGTH = 500

@@ -1,4 +1,8 @@
-import type { MedicalHistoryWithAuthor } from './medical-records.repository.js'
+import type {
+  ClinicalNoteWithAmendments,
+  ClinicalNoteWithDoctor,
+  MedicalHistoryWithAuthor,
+} from './medical-records.repository.js'
 
 export const toMedicalHistoryResponse = ({
   updatedBy,
@@ -13,3 +17,19 @@ export const toMedicalHistoryResponse = ({
 })
 
 export type MedicalHistoryResponse = ReturnType<typeof toMedicalHistoryResponse>
+
+const toNoteFields = ({ doctor, doctorId: _doctorId, ...note }: ClinicalNoteWithDoctor) => ({
+  ...note,
+  doctor: {
+    id: doctor.id,
+    name: `${doctor.firstName} ${doctor.lastName}`,
+    specialty: doctor.specialty,
+  },
+})
+
+export const toClinicalNoteResponse = ({ amendments, ...note }: ClinicalNoteWithAmendments) => ({
+  ...toNoteFields(note),
+  amendments: amendments.map(toNoteFields),
+})
+
+export type ClinicalNoteResponse = ReturnType<typeof toClinicalNoteResponse>
