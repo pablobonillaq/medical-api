@@ -5,6 +5,7 @@ import { env } from '../config/env.js'
 import { prisma } from '../db/prisma.js'
 import type { Role } from '../modules/users/users.schema.js'
 import { getLocalDate } from '../shared/utils/timezone.js'
+import type { AppointmentStatus } from '../generated/prisma/enums.js'
 
 export const app = createApp()
 
@@ -60,6 +61,32 @@ export const createDoctorWithService = async () => {
     include: { user: true },
   })
   return { doctor, service }
+}
+
+// An appointment created directly in the database (no availability rules).
+// It starts yesterday, so it never takes a slot that a booking test needs.
+export const createAppointment = ({
+  doctorId,
+  serviceId,
+  patientId,
+  status = 'completed',
+}: {
+  doctorId: string
+  serviceId: string
+  patientId: string
+  status?: AppointmentStatus
+}) => {
+  const startsAt = new Date(Date.now() - 24 * 60 * 60 * 1000)
+  return prisma.appointment.create({
+    data: {
+      doctorId,
+      serviceId,
+      patientId,
+      status,
+      startsAt,
+      endsAt: new Date(startsAt.getTime() + 30 * 60 * 1000),
+    },
+  })
 }
 
 // An agent keeps cookies between requests, like a browser after logging in
