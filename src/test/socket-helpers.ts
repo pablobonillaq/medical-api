@@ -44,3 +44,48 @@ export const connectSocket = (url: string, cookie?: string) =>
       reject(error)
     })
   })
+
+type ServerEvent = keyof ServerToClientEvents
+type EventPayload<E extends ServerEvent> = Parameters<ServerToClientEvents[E]>[0]
+
+// The generic helpers below use the untyped socket; their own signatures keep the types
+const untyped = (socket: ClientSocket) => socket as unknown as Socket
+
+// Waits for the next event of that name that passes the filter, or fails after timeoutMs
+export const waitForEvent = <E extends ServerEvent>(
+  socket: ClientSocket,
+  event: E,
+  {
+    filter = () => true,
+    timeoutMs = 2000,
+  }: {
+    filter?: (payload: EventPayload<E>) => boolean
+    timeoutMs?: number
+  } = {},
+) =>
+  new Promise<EventPayload<E>>((resolve, reject) => {
+    const name: string = event
+    const listener = (payload: EventPayload<E>) => {
+      if (!filter(payload)) return
+      clearTimeout(timer)
+      untyped(socket).off(name, listener)
+      resolve(payload)
+    }
+    const timer = setTimeout(() => {
+      untyped(socket).off(name, listener)
+      reject(new Error(`Timed out waiting for "${event}"`))
+    }, timeoutMs)
+    untyped(socket).on(name, listener)
+  })
+
+// Collects every event of that name, to check later that one did NOT arrive
+export const collectEvents = <E extends ServerEvent>(socket: ClientSocket, event: E) => {
+  const received: EventPayload<E>[] = []
+  const name: string = event
+  untyped(socket).on(name, (payload: EventPayload<E>) => {
+    received.push(payload)
+  })
+  return received
+}
+
+export const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))

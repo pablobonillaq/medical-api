@@ -9,6 +9,7 @@ import { SALT_ROUNDS } from '../auth/auth.constants.js'
 import { usersRepository } from './users.repository.js'
 import type { CreateStaffInput, ListUsersQuery, UpdateUserInput } from './users.schema.js'
 import { toPublicUser } from './users.types.js'
+import { appEvents } from '../../shared/events.js'
 
 export const usersService = {
   async createStaff({ email, password, role }: CreateStaffInput) {
@@ -35,6 +36,10 @@ export const usersService = {
     }
 
     const updated = await usersRepository.update(id, input)
+    if (updated.active !== user.active || updated.role !== user.role) {
+      appEvents.emit('user:access-changed', { userId: id })
+    }
+    return toPublicUser(updated)
     return toPublicUser(updated)
   },
 }

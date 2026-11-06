@@ -11,6 +11,7 @@ import type {
   UpdateConversationStatusInput,
 } from './chat.schema.js'
 import { toConversationResponse, type ChatSide } from './chat.types.js'
+import { appEvents } from '../../shared/events.js'
 
 const findPatientIdOrThrow = async (user: PublicUser) => {
   const patient = await patientsRepository.findByUserId(user.id)
@@ -55,12 +56,31 @@ const saveMessage = async (
     return { message, conversation: updated }
   })
 
+// Saves the message, then tells listeners (Socket.IO) once it is committed
+const sendMessage = async (
+  conversation: ConversationWithPatient,
+  side: ChatSide,
+  user: PublicUser,
+  input: SendMessageInput,
+) => {
+  const result = await saveMessage(conversation, side, user, input)
+  appEvents.emit('chat:message-created', result)
+  return result
+}
+
 const unreadFor = async (conversation: ConversationWithPatient, side: ChatSide) =>
   side === 'patient'
     ? chatRepository.countUnreadByPatient(conversation)
     : ((await chatRepository.countUnreadByClinic([conversation.id])).get(conversation.id) ?? 0)
 
 export const chatService = {
+  // Used by the Socket.IO handlers to check access without loading anything else
+  authorize: findConversationOrThrow,
+
+  // The conversation as one side sees it (each side has its own unread count)
+  describe: async (conversation: ConversationWithPatient, side: ChatSide) =>
+    toConversationResponse(conversation, await unreadFor(conversation, side)),
+
   // Front desk inbox with the number of unread patient messages in each conversation
   async listConversations({ status, page, pageSize }: ListConversationsQuery) {
     const [conversations, total] = await chatRepository.findMany({
@@ -106,13 +126,13 @@ export const chatService = {
     const conversation = await chatRepository.findOrCreateForPatient(
       await findPatientIdOrThrow(user),
     )
-    const result = await saveMessage(conversation, 'patient', user, input)
+    const result = await sendMessage(conversation, 'patient', user, input)
     return { message: result.message, conversation: toConversationResponse(result.conversation, 0) }
   },
 
   async send(conversationId: string, user: PublicUser, input: SendMessageInput) {
     const { conversation, side } = await findConversationOrThrow(conversationId, user)
-    const result = await saveMessage(conversation, side, user, input)
+    const result = await sendMessage(conversation, side, user, input)
     return {
       message: result.message,
       conversation: toConversationResponse(
@@ -131,6 +151,7 @@ export const chatService = {
       conversation.id,
       side === 'patient' ? { patientLastReadAt: readAt } : { clinicLastReadAt: readAt },
     )
+    appEvents.emit('chat:conversation-updated', { conversation: updated })
     return toConversationResponse(updated, 0)
   },
 
@@ -141,6 +162,7 @@ export const chatService = {
   ) {
     const { conversation } = await findConversationOrThrow(conversationId, user)
     const updated = await chatRepository.update(conversation.id, { status })
+    appEvents.emit('chat:conversation-updated', { conversation: updated })
     return toConversationResponse(updated, await unreadFor(updated, 'clinic'))
   },
 }

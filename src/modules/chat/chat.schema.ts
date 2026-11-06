@@ -34,6 +34,13 @@ export const updateConversationStatusSchema = z.object({
   status: z.enum(ConversationStatus, { error: 'status must be open or closed' }),
 })
 
+// Socket.IO payloads. A patient may leave out conversationId: it is their own conversation.
+export const socketSendMessageSchema = sendMessageSchema.extend({
+  conversationId: z.uuid({ error: 'Invalid conversation id' }).optional(),
+})
+
+export const socketConversationSchema = conversationIdParamsSchema
+
 export type SendMessageInput = z.infer<typeof sendMessageSchema>
 export type ListMessagesQuery = z.infer<typeof listMessagesQuerySchema>
 export type ListConversationsQuery = z.infer<typeof listConversationsQuerySchema>

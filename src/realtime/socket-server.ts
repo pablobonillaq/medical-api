@@ -8,6 +8,8 @@ import { AppError, ForbiddenError, UnauthorizedError } from '../shared/errors/ap
 import { readCookie } from '../shared/utils/cookies.js'
 import { STAFF_ROOM, userRoom } from './rooms.js'
 import type { AppServer, AppSocket } from './socket.types.js'
+import { registerChatBroadcast } from './chat-broadcast.js'
+import { registerChatHandlers } from './chat-handlers.js'
 
 const CHAT_ROLES: readonly Role[] = ['patient', 'employee']
 
@@ -53,7 +55,12 @@ export const createSocketServer = (httpServer: HttpServer): AppServer => {
     const { user } = socket.data
     void socket.join(userRoom(user.id))
     if (user.role === 'employee') void socket.join(STAFF_ROOM)
+    registerChatHandlers(socket)
   })
+
+  // Stop listening to domain events when the server closes (io.close() closes it too)
+  const stopBroadcast = registerChatBroadcast(io)
+  httpServer.once('close', stopBroadcast)
 
   return io
 }
