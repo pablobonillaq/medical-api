@@ -11,6 +11,8 @@ import { availabilityRouter } from './modules/appointments/availability.routes.j
 import { appointmentsRouter } from './modules/appointments/appointments.routes.js'
 import { auditLogsRouter } from './modules/audit/audit.routes.js'
 import { chatRouter } from './modules/chat/chat.routes.js'
+import { fileURLToPath } from 'node:url'
+import { env } from './config/env.js'
 
 export const createApp = () => {
   const app = express()
@@ -30,6 +32,11 @@ export const createApp = () => {
   app.use('/audit-logs', auditLogsRouter)
   app.use('/audit-logs', auditLogsRouter)
   app.use('/conversations', chatRouter)
+
+  // Demo pages for manual testing (public/), never served in production
+  if (env.NODE_ENV !== 'production') {
+    app.use('/demo', express.static(fileURLToPath(new URL('../public', import.meta.url))))
+  }
 
   app.use(notFoundHandler)
   app.use(errorHandler)

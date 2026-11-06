@@ -1214,6 +1214,125 @@ GET {{baseUrl}}/audit-logs?from=2026-12-31T00:00:00-06:00&to=2026-01-01T00:00:00
 
 
 # =============================================================================
+# Chat (REST) / Chat (REST)
+# Real-time events need a browser: open http://localhost:3000/demo/chat.html
+# in two windows and log in as the patient and as the employee.
+# Los eventos en tiempo real necesitan un navegador: abre
+# http://localhost:3000/demo/chat.html en dos ventanas e inicia sesión como la
+# paciente y como el empleado.
+# =============================================================================
+
+### Patient login → 200
+# Login de paciente → 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "{{patientEmail}}", "password": "{{patientPassword}}" }
+
+### My conversation before writing → 200 with conversation: null (or the existing one)
+# Mi conversación antes de escribir → 200 con conversation: null (o la que ya existe)
+GET {{baseUrl}}/conversations/me
+
+### First message (creates the conversation) → 201
+# Primer mensaje (crea la conversación) → 201
+# @name chatMessage
+POST {{baseUrl}}/conversations/me/messages
+Content-Type: application/json
+
+{ "body": "Hola, ¿tienen consulta el sábado?" }
+
+### Empty message → 400
+# Mensaje vacío → 400
+POST {{baseUrl}}/conversations/me/messages
+Content-Type: application/json
+
+{ "body": "   " }
+
+### Employee login → 200
+# Login de empleado → 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "{{employeeEmail}}", "password": "{{employeePassword}}" }
+
+### Inbox: open conversations with unread counts → 200
+# Bandeja: conversaciones abiertas con mensajes sin leer → 200
+GET {{baseUrl}}/conversations?status=open
+
+### Messages of the conversation → 200 (oldest first, nextCursor for older pages)
+# Mensajes de la conversación → 200 (del más antiguo al más reciente, nextCursor para páginas anteriores)
+GET {{baseUrl}}/conversations/{{chatMessage.response.body.$.conversation.id}}/messages?limit=30
+
+### Reply → 201 (it also marks the patient's messages as read)
+# Responder → 201 (también marca como leídos los mensajes de la paciente)
+POST {{baseUrl}}/conversations/{{chatMessage.response.body.$.conversation.id}}/messages
+Content-Type: application/json
+
+{ "body": "Sí, de 9 a 13 h. ¿Le agendo una cita?" }
+
+### Mark as read → 200
+# Marcar como leída → 200
+POST {{baseUrl}}/conversations/{{chatMessage.response.body.$.conversation.id}}/read
+
+### Close the conversation → 200
+# Cerrar la conversación → 200
+PATCH {{baseUrl}}/conversations/{{chatMessage.response.body.$.conversation.id}}/status
+Content-Type: application/json
+
+{ "status": "closed" }
+
+### Invalid status → 400
+# Estado inválido → 400
+PATCH {{baseUrl}}/conversations/{{chatMessage.response.body.$.conversation.id}}/status
+Content-Type: application/json
+
+{ "status": "archived" }
+
+### Employee tries the patient's /me route → 403
+# El empleado intenta la ruta /me de la paciente → 403
+POST {{baseUrl}}/conversations/me/messages
+Content-Type: application/json
+
+{ "body": "Hola" }
+
+### Patient login → 200
+# Login de paciente → 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "{{patientEmail}}", "password": "{{patientPassword}}" }
+
+### Unread replies from the clinic → 200 (unreadCount: 1)
+# Respuestas de la clínica sin leer → 200 (unreadCount: 1)
+GET {{baseUrl}}/conversations/me
+
+### Writing again reopens the conversation → 201 (status: open)
+# Volver a escribir reabre la conversación → 201 (status: open)
+POST {{baseUrl}}/conversations/me/messages
+Content-Type: application/json
+
+{ "body": "Sí, por favor, a las 10" }
+
+### Patient tries to close it → 403 (only the front desk closes conversations)
+# La paciente intenta cerrarla → 403 (solo recepción cierra conversaciones)
+PATCH {{baseUrl}}/conversations/{{chatMessage.response.body.$.conversation.id}}/status
+Content-Type: application/json
+
+{ "status": "closed" }
+
+### Doctor login → 200
+# Login del médico → 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "{{doctorEmail}}", "password": "{{doctorPassword}}" }
+
+### Doctors do not take part in the chat → 403
+# Los médicos no participan en el chat → 403
+GET {{baseUrl}}/conversations
+
+
+# =============================================================================
 # Permissions (patient) / Permisos (paciente)
 # =============================================================================
 

@@ -8,7 +8,7 @@
 
 REST API for managing a multi-doctor clinic: appointment scheduling, electronic medical records, patient–clinic chat, and appointment reminders via WhatsApp.
 
-> **Status:** in development. Phases 1–7 completed (base setup, database, authentication and roles, catalogs, appointments, tests and CI, medical records and audit log); next: real-time chat.
+> **Status:** in development. Phases 1–8 completed (base setup, database, authentication and roles, catalogs, appointments, tests and CI, medical records and audit log, real-time chat); next: WhatsApp reminders.
 > Portfolio project. All test data is **fictitious**.
 
 ## Features
@@ -19,7 +19,7 @@ REST API for managing a multi-doctor clinic: appointment scheduling, electronic 
 - [x] Appointment scheduling: availability, booking, cancelling and rescheduling, with no double booking
 - [x] Medical records: medical history and append-only clinical notes (never edited or deleted)
 - [x] Audit log of every access to medical records
-- [ ] Real-time chat between patients and the clinic
+- [x] Real-time chat between patients and the clinic
 - [ ] Appointment reminders via WhatsApp
 - [ ] File attachments (lab results, images)
 - [ ] OpenAPI / Swagger documentation
@@ -44,7 +44,8 @@ REST API for managing a multi-doctor clinic: appointment scheduling, electronic 
 - **Code quality:** ESLint (typescript-eslint) and Prettier
 - **Testing:** Vitest, Supertest and V8 coverage
 - **CI:** GitHub Actions and SonarQube Cloud
-- **Coming soon:** Socket.IO, WhatsApp Cloud API
+- **Real time:** Socket.IO
+- **Coming soon:** WhatsApp Cloud API
 
 ## Requirements
 
@@ -66,6 +67,8 @@ npm run dev
 ```
 
 Check that everything works at `GET http://localhost:3000/health`.
+
+To try the chat, open `http://localhost:3000/demo/chat.html` in two browser windows (one private): log in as a patient in one and as a front desk employee in the other. The demo page is not served in production.
 
 > The database is exposed on port **5433** to avoid conflicts with a local PostgreSQL installation using 5432.
 
@@ -268,6 +271,38 @@ Each appointment includes `startsAt` and `endsAt` in UTC plus `date` and `time` 
 
 Each entry stores who (user and role at that moment), what (action, resource and id), which patient, when, the IP and the browser. `details` only holds metadata, such as the names of the changed fields or the ids of the notes that were read, never clinical content.
 
+### Chat
+
+Each patient has one conversation with the clinic, answered by the front desk (`employee`). Doctors and admins do not take part (`403`).
+
+| Method  | Path                                      | Access                  | Description                                                                                                                                     |
+| ------- | ----------------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`   | `/conversations/me`                       | Patient                 | The patient's conversation with its `unreadCount` (`null` before the first message)                                                             |
+| `POST`  | `/conversations/me/messages`              | Patient                 | Sends a message (`{ "body": "..." }`, up to 2000 characters). The first one creates the conversation; writing again reopens a closed one        |
+| `GET`   | `/conversations`                          | Employee                | Inbox: most recent activity first, with the number of unread patient messages. Filter `status` (`open`, `closed`) and pagination                |
+| `GET`   | `/conversations/:conversationId`          | Employee or the patient | Returns a conversation (`404` for other patients)                                                                                               |
+| `GET`   | `/conversations/:conversationId/messages` | Employee or the patient | Messages, oldest first in each page. `?limit=` (max 100) and `?before=<message id>` to load older ones; `nextCursor` is `null` on the last page |
+| `POST`  | `/conversations/:conversationId/messages` | Employee or the patient | Sends a message                                                                                                                                 |
+| `POST`  | `/conversations/:conversationId/read`     | Employee or the patient | Marks the conversation as read up to its last message                                                                                           |
+| `PATCH` | `/conversations/:conversationId/status`   | Employee                | `{ "status": "open" \| "closed" }`                                                                                                              |
+
+Messages are never edited or deleted. Sending a message also counts as reading everything before it.
+
+### Real-time events (Socket.IO)
+
+The Socket.IO server shares the API's port. The connection is authenticated with the same session cookie as the REST API: only patients and front desk employees can connect, and the server closes the connection when the session expires or the account is disabled or changes role.
+
+| Direction       | Event                  | Payload                                | Description                                                                                                                                 |
+| --------------- | ---------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Client → server | `message:send`         | `{ conversationId?, body }` + callback | Sends a message. Patients may leave out `conversationId`. The callback receives `{ ok: true, data: { message } }` or `{ ok: false, error }` |
+| Client → server | `conversation:read`    | `{ conversationId }` + callback        | Marks the conversation as read                                                                                                              |
+| Client → server | `typing`               | `{ conversationId }`                   | "Typing…" indicator. Not saved; only sent to people who can see the conversation                                                            |
+| Server → client | `message:new`          | `{ message, conversation }`            | A new message, also when it was sent through the REST API. `conversation` includes the receiver's own `unreadCount`                         |
+| Server → client | `conversation:updated` | `{ conversation }`                     | The conversation was read, closed or reopened                                                                                               |
+| Server → client | `typing`               | `{ conversationId, side }`             | Someone is typing (`side`: `patient` or `clinic`)                                                                                           |
+
+Patients receive events about their own conversation; every front desk employee receives events about all conversations. The sender also receives `message:new` (for their other tabs), so clients avoid duplicates by message `id`.
+
 Requests without a valid session return `401`; requests from a role without permission return `403`. A disabled account loses access immediately.
 
 Errors are returned as `{ "error": "message" }`. Validation errors (`400`) also include `details` with `fieldErrors` (messages for each field) and `formErrors` (errors about the request as a whole).
@@ -287,8 +322,10 @@ Errors are returned as `{ "error": "message" }`. Validation errors (`400`) also 
 | `medical_histories` | Medical history of each patient (1:1): blood type, allergies, chronic conditions, medications, surgical and family history, and who last updated it                      |
 | `clinical_notes`    | SOAP notes, optionally linked to an appointment (one note per appointment). Amendments are new rows that point to the original note. Append-only                         |
 | `audit_logs`        | Who accessed or changed which medical record and when, including denied attempts. Metadata only. Append-only                                                             |
+| `conversations`     | One conversation per patient with the clinic: status (`open`, `closed`), last message time and when each side last read it                                               |
+| `messages`          | Chat messages: conversation, sender, sender role (`patient` or `employee`) and text (1–2000 characters). Append-only                                                     |
 
-Besides the validation in the API, the database enforces its own rules with `CHECK` constraints (service durations, valid days and hours, time off ranges, blood types and amendment rules). `clinical_notes` and `audit_logs` are **append-only**: a trigger rejects any `UPDATE` or `DELETE`, so not even a bug or a manual query can alter a note or the audit log.
+Besides the validation in the API, the database enforces its own rules with `CHECK` constraints (service durations, valid days and hours, time off ranges, blood types and amendment rules). `clinical_notes`, `audit_logs` and `messages` are **append-only**: a trigger rejects any `UPDATE` or `DELETE`, so not even a bug or a manual query can alter a note, the audit log or a message.
 
 ### Double booking prevention
 
@@ -302,6 +339,8 @@ The `appointments` table has a PostgreSQL `EXCLUDE` constraint (with the `btree_
 prisma/
 ├── schema.prisma          # database models
 └── migrations/            # SQL migration history (including CHECK constraints)
+public/
+└── chat.html              # demo page to try the chat in the browser (not served in production)
 src/
 ├── index.ts               # starts the server and handles shutdown
 ├── app.ts                 # creates and configures the Express app
@@ -311,14 +350,22 @@ src/
 │   ├── prisma.ts          # Prisma client instance
 │   └── seed.ts            # creates the first admin account
 ├── generated/             # generated Prisma client (not committed)
+├── realtime/
+│   ├── chat-broadcast.ts  # domain events → Socket.IO rooms (same for REST and sockets)
+│   ├── chat-handlers.ts   # message:send, conversation:read and typing, with acknowledgements
+│   ├── rooms.ts           # user:<id> and staff rooms
+│   ├── socket-server.ts   # Socket.IO server, cookie authentication, session expiry
+│   └── socket.types.ts    # typed events between server and clients
 ├── shared/
 │   ├── errors/            # custom error classes
+│   ├── events.ts          # typed EventEmitter for domain events (e.g. a message was saved)
 │   ├── middlewares/       # 404 and error handlers
 │   ├── schemas/           # shared Zod schemas (ids, names, pagination, PATCH helpers)
-│   └── utils/             # helpers: omitUndefined, HH:mm ↔ minutes, clinic time zone ↔ UTC
+│   └── utils/             # helpers: omitUndefined, HH:mm ↔ minutes, clinic time zone ↔ UTC, cookie reader
 ├── test/
 │   ├── global-setup.ts    # creates the test database and applies the migrations
-│   └── helpers.ts         # app instance, table reset, data factories and login helpers
+│   ├── helpers.ts         # app instance, table reset, data factories and login helpers
+│   └── socket-helpers.ts  # real HTTP + Socket.IO server, socket login and event helpers
 ├── types/
 │   └── express.d.ts       # adds `user` to the Express request type
 └── modules/
@@ -348,6 +395,14 @@ src/
     │   ├── auth.middleware.ts   # authenticate (session) and requireRole (permissions)
     │   ├── auth.routes.ts
     │   └── auth.service.ts      # business rules (hashing, JWT)
+    ├── chat/
+    │   ├── chat.constants.ts
+    │   ├── chat.controller.ts
+    │   ├── chat.repository.ts   # inbox, cursor pagination, unread counts (one SQL query)
+    │   ├── chat.routes.ts
+    │   ├── chat.schema.ts       # REST and Socket.IO payloads
+    │   ├── chat.service.ts      # access per side, send, read, close; emits domain events
+    │   └── chat.types.ts
     ├── doctors/
     │   ├── doctors.controller.ts
     │   ├── doctors.repository.ts  # queries, nested writes and transactions
@@ -406,7 +461,7 @@ Each module groups its validation schema, types, data access, controller and rou
 5. ~~Appointments and availability~~ ✅
 6. ~~Automated tests (Vitest), CI and code coverage (SonarQube)~~ ✅
 7. ~~Medical records and audit log~~ ✅
-8. Real-time chat
+8. ~~Real-time chat~~ ✅
 9. WhatsApp reminders
 10. File attachments
 11. Documentation, security and deployment

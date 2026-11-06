@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Clinic chat (demo)</title>
+    <style>
+      :root {
+        --bg: #f4f6f8;
+        --panel: #ffffff;
+        --text: #1d2733;
+        --muted: #6b7785;
+        --border: #dde3e9;
+        --accent: #0f766e;
+        --mine: #d9f2ee;
+        --theirs: #eef1f4;
+        --danger: #b42318;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font:
+          15px/1.45 system-ui,
+          sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+      header {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        padding: 10px 16px;
+        background: var(--panel);
+        border-bottom: 1px solid var(--border);
+      }
+      header h1 {
+        font-size: 17px;
+        margin: 0;
+        flex: 1;
+      }
+      .pill {
+        font-size: 12px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: var(--theirs);
+        color: var(--muted);
+      }
+      .pill.online {
+        background: var(--mine);
+        color: var(--accent);
+      }
+      button {
+        font: inherit;
+        padding: 6px 12px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--panel);
+        cursor: pointer;
+      }
+      button.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+      input {
+        font: inherit;
+        padding: 7px 10px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        width: 100%;
+      }
+      .error {
+        color: var(--danger);
+        min-height: 1.4em;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      #login {
+        max-width: 340px;
+        margin: 48px auto;
+        display: grid;
+        gap: 10px;
+        background: var(--panel);
+        padding: 20px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+      }
+      #app {
+        display: grid;
+        grid-template-columns: 260px 1fr;
+        height: calc(100vh - 53px);
+      }
+      #app.patient {
+        grid-template-columns: 1fr;
+      }
+      #inbox {
+        border-right: 1px solid var(--border);
+        background: var(--panel);
+        overflow-y: auto;
+      }
+      #inbox button {
+        display: flex;
+        justify-content: space-between;
+        width: 100%;
+        border: 0;
+        border-bottom: 1px solid var(--border);
+        border-radius: 0;
+        text-align: left;
+        padding: 12px;
+      }
+      #inbox button.active {
+        background: var(--mine);
+      }
+      .badge {
+        background: var(--accent);
+        color: #fff;
+        border-radius: 999px;
+        padding: 0 7px;
+        font-size: 12px;
+      }
+      main {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+      #conversationHeader {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        padding: 10px 16px;
+        background: var(--panel);
+        border-bottom: 1px solid var(--border);
+      }
+      #conversationTitle {
+        flex: 1;
+        font-weight: 600;
+      }
+      #messages {
+        flex: 1;
+        overflow-y: auto;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .message {
+        max-width: 70%;
+        padding: 8px 12px;
+        border-radius: 10px;
+        background: var(--theirs);
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .message.mine {
+        align-self: flex-end;
+        background: var(--mine);
+      }
+      .message small {
+        display: block;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      #typing {
+        padding: 0 16px;
+        color: var(--muted);
+        font-style: italic;
+        min-height: 1.4em;
+      }
+      #composer {
+        display: flex;
+        gap: 8px;
+        padding: 12px 16px;
+        background: var(--panel);
+        border-top: 1px solid var(--border);
+      }
+      .empty {
+        color: var(--muted);
+        text-align: center;
+        margin: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Clinic chat <span class="pill">demo</span></h1>
+      <span id="status" class="pill">offline</span>
+      <span id="whoami"></span>
+      <button id="logout" hidden>Log out</button>
+    </header>
+
+    <form id="login" hidden>
+      <strong>Log in as a patient or front desk employee</strong>
+      <input id="email" type="email" placeholder="Email" autocomplete="username" required />
+      <input
+        id="password"
+        type="password"
+        placeholder="Password"
+        autocomplete="current-password"
+        required
+      />
+      <button class="primary">Log in</button>
+      <div id="loginError" class="error"></div>
+    </form>
+
+    <div id="app" hidden>
+      <nav id="inbox" aria-label="Conversations"></nav>
+      <main>
+        <div id="conversationHeader">
+          <span id="conversationTitle">Select a conversation</span>
+          <span id="readInfo" class="pill" hidden></span>
+          <button id="toggleStatus" hidden></button>
+        </div>
+        <div id="messages"><p class="empty">No messages yet</p></div>
+        <div id="typing"></div>
+        <form id="composer">
+          <input id="body" placeholder="Write a message…" maxlength="2000" autocomplete="off" />
+          <button class="primary">Send</button>
+        </form>
+        <div id="chatError" class="error" style="padding: 0 16px 8px"></div>
+      </main>
+    </div>
+
+    <!-- Socket.IO serves its browser client at this path -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      // Plain JavaScript on purpose: no build step. All text from the API is inserted with
+      // textContent, never innerHTML, so a message cannot inject HTML or scripts (XSS).
+      const $ = (id) => document.getElementById(id)
+      const state = {
+        user: null,
+        socket: null,
+        conversationId: null,
+        conversations: new Map(),
+        renderedIds: new Set(),
+        nextCursor: null,
+        typingTimer: null,
+        lastTypingSentAt: 0,
+      }
+      const mySide = () => (state.user.role === 'patient' ? 'patient' : 'clinic')
+      const formatTime = (iso) =>
+        new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      const emptyNote = (text) => {
+        const note = document.createElement('p')
+        note.className = 'empty'
+        note.textContent = text
+        return note
+      }
+      const showError = (id, message) => {
+        $(id).textContent = message ?? ''
+      }
+
+      // fetch() sends the httpOnly session cookie automatically (same origin)
+      const api = async (path, options = {}) => {
+        const response = await fetch(path, {
+          ...options,
+          headers: { 'Content-Type': 'application/json' },
+        })
+        const body = response.status === 204 ? null : await response.json()
+        if (!response.ok) throw new Error(body?.error ?? `HTTP ${response.status}`)
+        return body
+      }
+
+      // ----- Rendering -----
+
+      const renderInbox = () => {
+        const inbox = $('inbox')
+        inbox.replaceChildren()
+        const sorted = [...state.conversations.values()].sort((a, b) =>
+          (b.lastMessageAt ?? '').localeCompare(a.lastMessageAt ?? ''),
+        )
+        if (sorted.length === 0) {
+          inbox.append(emptyNote('No conversations yet'))
+        }
+        for (const conversation of sorted) {
+          const item = document.createElement('button')
+          item.className = conversation.id === state.conversationId ? 'active' : ''
+          const name = document.createElement('span')
+          name.textContent = `${conversation.patient.firstName} ${conversation.patient.lastName}`
+          if (conversation.status === 'closed') name.textContent += ' (closed)'
+          item.append(name)
+          if (conversation.unreadCount > 0) {
+            const badge = document.createElement('span')
+            badge.className = 'badge'
+            badge.textContent = String(conversation.unreadCount)
+            item.append(badge)
+          }
+          item.addEventListener('click', () => void openConversation(conversation.id))
+          inbox.append(item)
+        }
+      }
+
+      const renderHeader = () => {
+        const conversation = state.conversations.get(state.conversationId)
+        const isStaff = mySide() === 'clinic'
+        if (!conversation) {
+          $('conversationTitle').textContent = isStaff
+            ? 'Select a conversation'
+            : 'Write your first message to the clinic'
+          $('readInfo').hidden = true
+          $('toggleStatus').hidden = true
+          return
+        }
+        $('conversationTitle').textContent = isStaff
+          ? `${conversation.patient.firstName} ${conversation.patient.lastName}`
+          : 'Clinic front desk'
+        // Read receipt: when the other side last read the conversation
+        const otherReadAt = isStaff ? conversation.patientLastReadAt : conversation.clinicLastReadAt
+        $('readInfo').hidden = !otherReadAt
+        if (otherReadAt) $('readInfo').textContent = `Seen ${formatTime(otherReadAt)}`
+        $('toggleStatus').hidden = !isStaff
+        $('toggleStatus').textContent = conversation.status === 'open' ? 'Close' : 'Reopen'
+      }
+
+      const messageElement = (message) => {
+        const element = document.createElement('div')
+        element.className = message.senderId === state.user.id ? 'message mine' : 'message'
+        element.textContent = message.body
+        const time = document.createElement('small')
+        time.textContent = formatTime(message.createdAt)
+        element.append(time)
+        return element
+      }
+
+      // The sender gets a message twice (callback and "message:new"): ids avoid duplicates
+      const appendMessage = (message) => {
+        if (state.renderedIds.has(message.id)) return
+        state.renderedIds.add(message.id)
+        const list = $('messages')
+        list.querySelector('.empty')?.remove()
+        list.append(messageElement(message))
+        list.scrollTop = list.scrollHeight
+      }
+
+      const renderOlderButton = () => {
+        $('messages').querySelector('#older')?.remove()
+        if (!state.nextCursor) return
+        const button = document.createElement('button')
+        button.id = 'older'
+        button.textContent = 'Load older messages'
+        button.addEventListener('click', () => void loadOlder())
+        $('messages').prepend(button)
+      }
+
+      // ----- Actions -----
+
+      const upsertConversation = (conversation) => {
+        state.conversations.set(conversation.id, conversation)
+        if (mySide() === 'clinic') renderInbox()
+        if (conversation.id === state.conversationId) renderHeader()
+      }
+
+      const markAsRead = () => {
+        if (!state.conversationId || document.visibilityState !== 'visible') return
+        state.socket.emit('conversation:read', { conversationId: state.conversationId }, () => {})
+      }
+
+      const openConversation = async (conversationId) => {
+        state.conversationId = conversationId
+        state.renderedIds.clear()
+        $('messages').replaceChildren()
+        const page = await api(`/conversations/${conversationId}/messages?limit=30`)
+        if (page.messages.length === 0) $('messages').append(emptyNote('No messages yet'))
+        page.messages.forEach(appendMessage)
+        state.nextCursor = page.nextCursor
+        renderOlderButton()
+        renderHeader()
+        if (mySide() === 'clinic') renderInbox()
+        markAsRead()
+      }
+
+      const loadOlder = async () => {
+        const page = await api(
+          `/conversations/${state.conversationId}/messages?limit=30&before=${state.nextCursor}`,
+        )
+        const list = $('messages')
+        const previousHeight = list.scrollHeight
+        for (const message of [...page.messages].reverse()) {
+          if (state.renderedIds.has(message.id)) continue
+          state.renderedIds.add(message.id)
+          list.prepend(messageElement(message))
+        }
+        state.nextCursor = page.nextCursor
+        renderOlderButton()
+        // Keep the view where it was instead of jumping to the top
+        list.scrollTop = list.scrollHeight - previousHeight
+      }
+
+      const sendMessage = (body) => {
+        const payload = state.conversationId
+          ? { conversationId: state.conversationId, body }
+          : { body }
+        // timeout(): the callback gets an error if the server does not answer in 5 s
+        state.socket.timeout(5000).emit('message:send', payload, (timeoutError, response) => {
+          if (timeoutError) return showError('chatError', 'The server did not answer')
+          if (!response.ok) return showError('chatError', response.error)
+          showError('chatError', '')
+          // A patient's first message creates the conversation
+          if (!state.conversationId) state.conversationId = response.data.message.conversationId
+          appendMessage(response.data.message)
+        })
+      }
+
+      // ----- Socket.IO -----
+
+      const connectSocket = () => {
+        // The handshake carries the session cookie, as any request to this origin does
+        const socket = io()
+        state.socket = socket
+
+        socket.on('connect', () => {
+          $('status').textContent = 'online'
+          $('status').className = 'pill online'
+          showError('chatError', '')
+        })
+        socket.on('disconnect', (reason) => {
+          $('status').textContent = 'offline'
+          $('status').className = 'pill'
+          // The server closed it (session expired or account disabled): do not retry
+          if (reason === 'io server disconnect')
+            showError('chatError', 'Session closed by the server')
+        })
+        socket.on('connect_error', (error) => showError('chatError', error.message))
+
+        socket.on('message:new', ({ message, conversation }) => {
+          if (!state.conversationId && mySide() === 'patient') {
+            state.conversationId = conversation.id
+          }
+          upsertConversation(conversation)
+          if (message.conversationId !== state.conversationId) return
+          appendMessage(message)
+          if (message.senderId !== state.user.id) markAsRead()
+        })
+
+        socket.on('conversation:updated', ({ conversation }) => upsertConversation(conversation))
+
+        socket.on('typing', ({ conversationId, side }) => {
+          if (conversationId !== state.conversationId || side === mySide()) return
+          $('typing').textContent =
+            side === 'patient' ? 'The patient is typing…' : 'The clinic is typing…'
+          clearTimeout(state.typingTimer)
+          state.typingTimer = setTimeout(() => ($('typing').textContent = ''), 3000)
+        })
+      }
+
+      // ----- Start -----
+
+      const start = async (user) => {
+        state.user = user
+        $('login').hidden = true
+        $('logout').hidden = false
+        $('whoami').textContent = `${user.email} (${user.role})`
+        if (user.role !== 'patient' && user.role !== 'employee') {
+          $('whoami').textContent += ' — the chat is only for patients and front desk staff'
+          return
+        }
+        $('app').hidden = false
+        $('app').className = user.role
+        $('inbox').hidden = user.role === 'patient'
+        connectSocket()
+
+        if (user.role === 'employee') {
+          const { conversations } = await api('/conversations?pageSize=100')
+          conversations.forEach((conversation) =>
+            state.conversations.set(conversation.id, conversation),
+          )
+          renderInbox()
+          renderHeader()
+        } else {
+          const { conversation } = await api('/conversations/me')
+          if (conversation) {
+            state.conversations.set(conversation.id, conversation)
+            await openConversation(conversation.id)
+          } else {
+            renderHeader()
+          }
+        }
+      }
+
+      $('login').addEventListener('submit', async (event) => {
+        event.preventDefault()
+        try {
+          const { user } = await api('/auth/login', {
+            method: 'POST',
+            body: JSON.stringify({ email: $('email').value, password: $('password').value }),
+          })
+          showError('loginError', '')
+          await start(user)
+        } catch (error) {
+          showError('loginError', error.message)
+        }
+      })
+
+      $('logout').addEventListener('click', async () => {
+        state.socket?.disconnect()
+        await api('/auth/logout', { method: 'POST' })
+        location.reload()
+      })
+
+      $('composer').addEventListener('submit', (event) => {
+        event.preventDefault()
+        const body = $('body').value.trim()
+        if (!body) return
+        if (mySide() === 'clinic' && !state.conversationId) {
+          return showError('chatError', 'Select a conversation first')
+        }
+        sendMessage(body)
+        $('body').value = ''
+      })
+
+      // At most one "typing" event every 2 seconds
+      $('body').addEventListener('input', () => {
+        if (!state.conversationId || Date.now() - state.lastTypingSentAt < 2000) return
+        state.lastTypingSentAt = Date.now()
+        state.socket.emit('typing', { conversationId: state.conversationId })
+      })
+
+      $('toggleStatus').addEventListener('click', async () => {
+        const conversation = state.conversations.get(state.conversationId)
+        const status = conversation.status === 'open' ? 'closed' : 'open'
+        try {
+          const response = await api(`/conversations/${state.conversationId}/status`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status }),
+          })
+          upsertConversation(response.conversation)
+        } catch (error) {
+          showError('chatError', error.message)
+        }
+      })
+
+      // Coming back to the tab marks the open conversation as read
+      document.addEventListener('visibilitychange', markAsRead)
+
+      // Reuse an existing session if the cookie is still valid
+      api('/auth/me')
+        .then(({ user }) => start(user))
+        .catch(() => ($('login').hidden = false))
+    </script>
+  </body>
+</html>
