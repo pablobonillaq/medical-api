@@ -35,6 +35,10 @@ model User {
   auditLogs             AuditLog[]
   sentMessages          Message[]
 
+  uploadedAttachments Attachment[] @relation("AttachmentUploadedBy")
+  reviewedAttachments Attachment[] @relation("AttachmentReviewedBy")
+  voidedAttachments   Attachment[] @relation("AttachmentVoidedBy")
+
   @@map("users")
 }
 
@@ -129,6 +133,7 @@ model Patient {
   clinicalNotes  ClinicalNote[]
   auditLogs      AuditLog[]
   conversation   Conversation?
+  attachments    Attachment[]
 
   @@index([lastName, firstName])
   @@map("patients")
@@ -207,6 +212,7 @@ model ClinicalNote {
   appointment Appointment?   @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
   amends      ClinicalNote?  @relation("NoteAmendments", fields: [amendsNoteId], references: [id], onDelete: Restrict)
   amendments  ClinicalNote[] @relation("NoteAmendments")
+  attachments Attachment[]
 
   @@index([patientId, createdAt])
   @@index([amendsNoteId])
@@ -223,6 +229,7 @@ enum AuditAction {
 enum AuditResource {
   medical_history
   clinical_note
+  attachment
 }
 
 // Who accessed which record and when. Metadata only, never clinical content. Append-only
@@ -284,4 +291,45 @@ model Message {
 
   @@index([conversationId, id])
   @@map("messages")
+}
+
+enum AttachmentCategory {
+  lab_result
+  imaging
+  prescription
+  referral
+  other
+}
+
+// A file in the patient's record. The file itself lives in storage (storageKey);
+// the database keeps its metadata and SHA-256 hash. Never deleted: it can be voided.
+model Attachment {
+  id             String             @id @default(uuid(7)) @db.Uuid
+  patientId      String             @map("patient_id") @db.Uuid
+  clinicalNoteId String?            @map("clinical_note_id") @db.Uuid
+  uploadedById   String             @map("uploaded_by_id") @db.Uuid
+  uploaderRole   Role               @map("uploader_role")
+  category       AttachmentCategory @default(other)
+  description    String?
+  originalName   String             @map("original_name")
+  mimeType       String             @map("mime_type")
+  sizeBytes      Int                @map("size_bytes")
+  sha256         String             @db.Char(64)
+  storageKey     String             @unique @map("storage_key")
+  reviewedById   String?            @map("reviewed_by_id") @db.Uuid
+  reviewedAt     DateTime?          @map("reviewed_at") @db.Timestamptz(3)
+  voidedById     String?            @map("voided_by_id") @db.Uuid
+  voidedAt       DateTime?          @map("voided_at") @db.Timestamptz(3)
+  voidReason     String?            @map("void_reason")
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  patient      Patient       @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  clinicalNote ClinicalNote? @relation(fields: [clinicalNoteId], references: [id], onDelete: Restrict)
+  uploadedBy   User          @relation("AttachmentUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
+  reviewedBy   User?         @relation("AttachmentReviewedBy", fields: [reviewedById], references: [id], onDelete: Restrict)
+  voidedBy     User?         @relation("AttachmentVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict)
+
+  @@index([patientId, createdAt])
+  @@index([uploadedById])
+  @@map("attachments")
 }
