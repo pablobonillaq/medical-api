@@ -1,4 +1,6 @@
 import { defineConfig } from 'vitest/config'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 
 // Integration tests use their own database, never the development one.
 // In CI it can be changed with the TEST_DATABASE_URL environment variable.
@@ -16,6 +18,7 @@ export default defineConfig({
       DATABASE_URL: testDatabaseUrl,
       JWT_SECRET: 'test-secret-that-is-long-enough-for-the-validation',
       CLINIC_TIMEZONE: 'America/Mexico_City',
+      UPLOADS_DIR: path.join(tmpdir(), 'medical-api-test-uploads'),
     },
     // Undo every vi.spyOn() after each test, so tests do not affect each other
     restoreMocks: true,

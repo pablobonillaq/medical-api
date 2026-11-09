@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import path from 'node:path'
 
 try {
   process.loadEnvFile()
@@ -27,6 +28,11 @@ const envSchema = z.object({
     .string()
     .default('America/Mexico_City')
     .refine(isValidTimeZone, { error: 'CLINIC_TIMEZONE must be a valid IANA time zone' }),
+  UPLOADS_DIR: z
+    .string()
+    .min(1)
+    .default('storage/uploads')
+    .transform((dir) => path.resolve(dir)),
 })
 
 const result = envSchema.safeParse(process.env)
