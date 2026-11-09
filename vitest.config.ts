@@ -54,6 +54,7 @@ export default defineConfig({
         'src/types/**',
         'src/index.ts',
         'src/db/seed.ts',
+        'src/scripts/**',
       ],
       reporter: ['text', 'html', 'lcov'],
     },

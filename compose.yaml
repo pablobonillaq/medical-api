@@ -16,6 +16,13 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-
+    # Catches every email in development: nothing leaves your computer
+  mail:
+    image: axllent/mailpit:latest
+    container_name: medical-mail
+    restart: unless-stopped
+    ports:
+      - '1025:1025' # SMTP: where the API sends emails
+      - '8025:8025' # Web inbox: http://localhost:8025
 volumes:
   pgdata:

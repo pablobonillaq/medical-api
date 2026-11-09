@@ -33,9 +33,23 @@ const envSchema = z.object({
     .min(1)
     .default('storage/uploads')
     .transform((dir) => path.resolve(dir)),
+  // Name shown in messages to patients
+  CLINIC_NAME: z.string().min(1).default('Clínica'),
+  // Outgoing email. The defaults point to Mailpit (compose.yaml), which sends nothing out.
+  SMTP_HOST: z.string().min(1).default('localhost'),
+  SMTP_PORT: z.coerce.number().int().positive().default(1025),
+  SMTP_SECURE: z.stringbool().default(false),
+  SMTP_USER: z.string().min(1).optional(),
+  SMTP_PASSWORD: z.string().min(1).optional(),
+  MAIL_FROM: z.string().min(3).default('Clínica <no-reply@clinica.test>'),
 })
 
-const result = envSchema.safeParse(process.env)
+const result = envSchema
+  .refine((vars) => (vars.SMTP_USER === undefined) === (vars.SMTP_PASSWORD === undefined), {
+    error: 'Set both SMTP_USER and SMTP_PASSWORD, or neither',
+    path: ['SMTP_PASSWORD'],
+  })
+  .safeParse(process.env)
 
 if (!result.success) {
   console.error('Invalid environment variables:\n' + z.prettifyError(result.error))
