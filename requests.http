@@ -1333,6 +1333,147 @@ GET {{baseUrl}}/conversations
 
 
 # =============================================================================
+# Attachments / Archivos adjuntos
+# Run the Medical records section first (the doctor must treat the patient).
+# Ejecuta antes la sección Medical records (la doctora debe atender a la paciente).
+# fixtures/sample-lab-result.pdf is a fictitious PDF.
+# fixtures/sample-lab-result.pdf es un PDF ficticio.
+# =============================================================================
+
+### Patient login → 200
+# Login de paciente → 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "{{patientEmail}}", "password": "{{patientPassword}}" }
+
+### Patient uploads an external lab result → 201 (status: pending_review)
+# La paciente sube un estudio externo → 201 (status: pending_review)
+# @name patientAttachment
+POST {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}/attachments
+Content-Type: multipart/form-data; boundary=MedicalApiBoundary
+
+--MedicalApiBoundary
+Content-Disposition: form-data; name="category"
+
+lab_result
+--MedicalApiBoundary
+Content-Disposition: form-data; name="description"
+
+Química sanguínea de laboratorio externo
+--MedicalApiBoundary
+Content-Disposition: form-data; name="file"; filename="Química sanguínea.pdf"
+Content-Type: application/pdf
+
+< ./fixtures/sample-lab-result.pdf
+--MedicalApiBoundary--
+
+### A text file renamed to .pdf → 415 (the content is checked, not the name)
+# Un archivo de texto renombrado a .pdf → 415 (se revisa el contenido, no el nombre)
+POST {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}/attachments
+Content-Type: multipart/form-data; boundary=MedicalApiBoundary
+
+--MedicalApiBoundary
+Content-Disposition: form-data; name="file"; filename="resultado.pdf"
+Content-Type: application/pdf
+
+< ./README.md
+--MedicalApiBoundary--
+
+### Patient lists their files → 200
+# La paciente lista sus archivos → 200
+GET {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}/attachments
+
+### Patient downloads the file → 200 (Content-Disposition: attachment)
+# La paciente descarga el archivo → 200 (Content-Disposition: attachment)
+GET {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}/attachments/{{patientAttachment.response.body.$.attachment.id}}/download
+
+### Patient tries to review it → 403 (only the treating doctor)
+# La paciente intenta revisarlo → 403 (solo el médico tratante)
+POST {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}/attachments/{{patientAttachment.response.body.$.attachment.id}}/review
+
+### Employee login → 200
+# Login de empleado → 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "{{employeeEmail}}", "password": "{{employeePassword}}" }
+
+### Front desk uploads a scanned study → 201 (status: pending_review)
+# Recepción sube un estudio escaneado → 201 (status: pending_review)
+# @name employeeAttachment
+POST {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}/attachments
+Content-Type: multipart/form-data; boundary=MedicalApiBoundary
+
+--MedicalApiBoundary
+Content-Disposition: form-data; name="category"
+
+referral
+--MedicalApiBoundary
+Content-Disposition: form-data; name="file"; filename="referencia.pdf"
+Content-Type: application/pdf
+
+< ./fixtures/sample-lab-result.pdf
+--MedicalApiBoundary--
+
+### Front desk lists → 200, only its own upload
+# Recepción lista → 200, solo lo que ella subió
+GET {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}/attachments
+
+### Front desk tries to download → 403 (recorded as denied)
+# Recepción intenta descargar → 403 (se registra como denied)
+GET {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}/attachments/{{employeeAttachment.response.body.$.attachment.id}}/download
+
+### Doctor login → 200
+# Login del médico → 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "{{doctorEmail}}", "password": "{{doctorPassword}}" }
+
+### Doctor lists every file of the patient → 200
+# El médico lista todos los archivos de la paciente → 200
+GET {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}/attachments
+
+### Doctor reviews the patient's upload → 200 (status: reviewed)
+# El médico revisa lo que subió la paciente → 200 (status: reviewed)
+POST {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}/attachments/{{patientAttachment.response.body.$.attachment.id}}/review
+
+### Review it again → 409
+# Revisarlo otra vez → 409
+POST {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}/attachments/{{patientAttachment.response.body.$.attachment.id}}/review
+
+### Doctor voids the front desk upload → 200 (status: voided, the file is kept)
+# El médico anula lo que subió recepción → 200 (status: voided, el archivo se conserva)
+POST {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}/attachments/{{employeeAttachment.response.body.$.attachment.id}}/void
+Content-Type: application/json
+
+{ "reason": "Referencia de otro paciente" }
+
+### Void without a reason → 400
+# Anular sin motivo → 400
+POST {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}/attachments/{{patientAttachment.response.body.$.attachment.id}}/void
+Content-Type: application/json
+
+{}
+
+### Voided files only with includeVoided → 200
+# Archivos anulados solo con includeVoided → 200
+GET {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}/attachments?includeVoided=true
+
+### Other doctor login → 200
+# Login del otro médico → 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "{{otherDoctorEmail}}", "password": "{{otherDoctorPassword}}" }
+
+### A doctor who does not treat the patient → 404 (recorded as denied)
+# Un médico que no atiende a la paciente → 404 (se registra como denied)
+GET {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}/attachments
+
+
+# =============================================================================
 # Permissions (patient) / Permisos (paciente)
 # =============================================================================
 

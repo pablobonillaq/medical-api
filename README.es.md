@@ -8,7 +8,7 @@
 
 API REST para la gestión de una clínica con varios médicos: agenda de citas, expedientes clínicos, chat entre pacientes y clínica, y recordatorios de citas por WhatsApp.
 
-> **Estado:** en desarrollo. Fases 1–8 completadas (configuración base, base de datos, autenticación y roles, catálogos, citas, pruebas e integración continua, expediente clínico y auditoría, chat en tiempo real); siguen los recordatorios por WhatsApp.
+> **Estado:** en desarrollo. Fases 1–8 y 10 completadas (configuración base, base de datos, autenticación y roles, catálogos, citas, pruebas e integración continua, expediente clínico y auditoría, chat en tiempo real, archivos adjuntos); siguen los recordatorios por WhatsApp (fase 9).
 > Proyecto de portafolio. Todos los datos de pruebas son **ficticios**.
 
 ## Funcionalidades
@@ -21,7 +21,7 @@ API REST para la gestión de una clínica con varios médicos: agenda de citas, 
 - [x] Registro de auditoría de cada acceso a expedientes
 - [x] Chat en tiempo real entre pacientes y clínica
 - [ ] Recordatorios de citas por WhatsApp
-- [ ] Archivos adjuntos (estudios de laboratorio, imágenes)
+- [x] Archivos adjuntos (estudios de laboratorio, imágenes)
 - [ ] Documentación con OpenAPI / Swagger
 
 ## Roles
@@ -45,6 +45,7 @@ API REST para la gestión de una clínica con varios médicos: agenda de citas, 
 - **Pruebas:** Vitest, Supertest y cobertura con V8
 - **Integración continua:** GitHub Actions y SonarQube Cloud
 - **Tiempo real:** Socket.IO
+- **Subida de archivos:** Multer (en memoria), guardados en disco detrás de una interfaz de almacenamiento
 - **Por agregar:** WhatsApp Cloud API
 
 ## Requisitos
@@ -84,6 +85,7 @@ Para probar el chat, abre `http://localhost:3000/demo/chat.html` en dos ventanas
 | `DATABASE_URL`      | Cadena de conexión que usan Prisma y la API                                                  | `postgresql://medical:medical@localhost:5433/medical_api?schema=public` |
 | `JWT_SECRET`        | Clave para firmar los tokens JWT                                                             | una cadena larga y aleatoria                                            |
 | `CLINIC_TIMEZONE`   | Zona horaria de la clínica (IANA). Los horarios usan hora local; las citas se guardan en UTC | `America/Mexico_City`                                                   |
+| `UPLOADS_DIR`       | Carpeta de los archivos subidos (relativa a donde se inicia la API). Nunca se sube a git     | `storage/uploads`                                                       |
 | `ADMIN_EMAIL`       | Email de la primera cuenta de admin que crea el seed                                         | `admin@clinica.test`                                                    |
 | `ADMIN_PASSWORD`    | Contraseña de esa cuenta de admin (mínimo 12 caracteres)                                     | una contraseña larga                                                    |
 
@@ -263,6 +265,24 @@ Cada cita incluye `startsAt` y `endsAt` en UTC, y `date` y `time` en hora local 
 - Las notas no se editan ni se borran. Las enmiendas siempre apuntan a la nota original y solo su autor puede agregarlas.
 - Cada lectura, cambio e intento denegado se guarda en la bitácora de auditoría. Un cambio y su registro de auditoría se guardan en la misma transacción.
 
+### Archivos adjuntos
+
+Estudios de laboratorio, imágenes y otros archivos del expediente del paciente.
+
+| Método | Ruta                                                      | Acceso                                  | Descripción                                                                                                                                                                                                                    |
+| ------ | --------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `POST` | `/patients/:patientId/attachments`                        | Médico tratante, el paciente o empleado | Sube un archivo como `multipart/form-data`: `file` más, opcionalmente, `category` (`lab_result`, `imaging`, `prescription`, `referral`, `other`), `description` y `clinicalNoteId` (solo médicos, una nota del mismo paciente) |
+| `GET`  | `/patients/:patientId/attachments`                        | Médico tratante, el paciente o empleado | Paginado, del más reciente al más antiguo. Los empleados solo ven los archivos que ellos subieron. Los anulados se ocultan; el médico puede agregar `?includeVoided=true`                                                      |
+| `GET`  | `/patients/:patientId/attachments/:attachmentId/download` | Médico tratante o el paciente           | Descarga el archivo. Los empleados reciben `403`                                                                                                                                                                               |
+| `POST` | `/patients/:patientId/attachments/:attachmentId/review`   | Médico tratante                         | Marca como revisado un archivo que subió el paciente o recepción (`409` si ya lo estaba o está anulado)                                                                                                                        |
+| `POST` | `/patients/:patientId/attachments/:attachmentId/void`     | Médico tratante                         | Anula un archivo equivocado con un `reason`: se oculta pero se conserva (`409` si ya estaba anulado)                                                                                                                           |
+
+- Solo se aceptan archivos **PDF, JPEG, PNG y WebP** de hasta **10 MB** (`415` y `413` si no). El tipo se detecta por los primeros bytes del archivo, no por su nombre ni por el `Content-Type` que manda el cliente.
+- Cada archivo se guarda con un nombre aleatorio, fuera de las carpetas públicas, junto con su hash SHA-256. El nombre original se limpia y solo se usa en el `Content-Disposition` de la descarga.
+- Las descargas siempre se envían como archivo adjunto, con `X-Content-Type-Options: nosniff` y `Cache-Control: private, no-store`.
+- Los archivos nunca se borran. Cada respuesta incluye un `status`: `pending_review`, `reviewed` o `voided`. Lo que sube el propio médico cuenta como revisado.
+- Las subidas, listas, descargas, revisiones, anulaciones e intentos denegados quedan en la bitácora, sin nombres de archivo (podrían revelar información clínica).
+
 ### Bitácora de auditoría
 
 | Método | Ruta          | Acceso | Descripción                                                                                                                                                                                           |
@@ -324,8 +344,9 @@ Los errores se devuelven como `{ "error": "mensaje" }`. Los errores de validaci�
 | `audit_logs`        | Quién consultó o modificó qué expediente y cuándo, incluidos los intentos denegados. Solo metadatos. Solo se agregan filas                                                      |
 | `conversations`     | Una conversación por paciente con la clínica: estado (`open`, `closed`), hora del último mensaje y cuándo la leyó cada lado por última vez                                      |
 | `messages`          | Mensajes del chat: conversación, remitente, rol del remitente (`patient` o `employee`) y texto (1–2000 caracteres). Solo se agregan filas                                       |
+| `attachments`       | Archivos del expediente: nombre original, tipo, tamaño, hash SHA-256, clave de almacenamiento, categoría, quién lo subió, revisó y anuló. Nunca se borran                       |
 
-Además de la validación en la API, la base de datos aplica sus propias reglas con restricciones `CHECK` (duración de los servicios, días y horas válidos, rangos de días libres, tipos de sangre y reglas de las enmiendas). En `clinical_notes`, `audit_logs` y `messages` **solo se agregan filas**: un trigger rechaza cualquier `UPDATE` o `DELETE`, así que ni un bug ni una consulta manual pueden alterar una nota, la bitácora o un mensaje.
+Además de la validación en la API, la base de datos aplica sus propias reglas con restricciones `CHECK` (duración de los servicios, días y horas válidos, rangos de días libres, tipos de sangre y reglas de las enmiendas). En `clinical_notes`, `audit_logs` y `messages` **solo se agregan filas**: un trigger rechaza cualquier `UPDATE` o `DELETE`, así que ni un bug ni una consulta manual pueden alterar una nota, la bitácora o un mensaje. En `attachments` un trigger solo permite llenar, una vez, los datos de revisión y de anulación.
 
 ### Prevención del doble agendado
 
@@ -336,6 +357,8 @@ La tabla `appointments` tiene una restricción `EXCLUDE` de PostgreSQL (con la e
 ```
 .github/
 └── workflows/ci.yml        # CI: tipos, lint, formato, pruebas y análisis de SonarQube
+fixtures/
+└── sample-lab-result.pdf  # PDF ficticio para probar subidas desde requests.http
 prisma/
 ├── schema.prisma          # modelos de la base de datos
 └── migrations/            # historial de migraciones en SQL (incluye restricciones CHECK)
@@ -361,6 +384,7 @@ src/
 │   ├── events.ts          # EventEmitter tipado para eventos de dominio (p. ej. se guardó un mensaje)
 │   ├── middlewares/       # manejadores de 404 y de errores
 │   ├── schemas/           # schemas de Zod compartidos (ids, nombres, paginación, ayudas para PATCH)
+│   ├── storage/           # interfaz FileStorage y su implementación en disco local
 │   └── utils/             # utilidades: omitUndefined, HH:mm ↔ minutos, zona horaria de la clínica ↔ UTC, lectura de cookies
 ├── test/
 │   ├── global-setup.ts    # crea la base de datos de pruebas y aplica las migraciones
@@ -382,6 +406,19 @@ src/
     │   ├── availability.routes.ts
     │   ├── availability.service.ts    # carga horario, días libres y citas en paralelo
     │   └── availability.ts            # computeSlots: función pura, sin acceso a la base de datos
+    ├── attachments/
+    │   ├── attachments.constants.ts  # tipos permitidos y límite de 10 MB
+    │   ├── attachments.controller.ts # cabeceras de descarga y envío por streaming
+    │   ├── attachments.repository.ts # actualizaciones condicionales para revisar y anular
+    │   ├── attachments.routes.ts     # montado bajo /patients/:patientId/attachments
+    │   ├── attachments.schema.ts
+    │   ├── attachments.service.ts    # acceso por rol, subida sin archivos huérfanos, auditoría
+    │   ├── attachments.types.ts      # respuesta con status, sin la clave de almacenamiento
+    │   ├── file-hash.ts              # SHA-256
+    │   ├── file-name.ts              # limpia el nombre original del archivo
+    │   ├── file-type.ts              # detecta PDF, JPEG, PNG y WebP por sus primeros bytes
+    │   ├── upload.middleware.ts      # Multer en memoria, 413 para archivos grandes
+    │   └── uploaded-file.ts          # revisa un archivo antes de guardarlo
     ├── audit/
     │   ├── audit.controller.ts
     │   ├── audit.repository.ts
@@ -463,7 +500,7 @@ Cada módulo agrupa su schema de validación, tipos, acceso a datos, controlador
 7. ~~Expedientes clínicos y auditoría~~ ✅
 8. ~~Chat en tiempo real~~ ✅
 9. Recordatorios por WhatsApp
-10. Archivos adjuntos
+10. ~~Archivos adjuntos~~ ✅
 11. Documentación, seguridad y despliegue
 
 ## Privacidad de datos

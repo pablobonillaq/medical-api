@@ -8,7 +8,7 @@
 
 REST API for managing a multi-doctor clinic: appointment scheduling, electronic medical records, patient–clinic chat, and appointment reminders via WhatsApp.
 
-> **Status:** in development. Phases 1–8 completed (base setup, database, authentication and roles, catalogs, appointments, tests and CI, medical records and audit log, real-time chat); next: WhatsApp reminders.
+> **Status:** in development. Phases 1–8 and 10 completed (base setup, database, authentication and roles, catalogs, appointments, tests and CI, medical records and audit log, real-time chat, file attachments); next: WhatsApp reminders (phase 9).
 > Portfolio project. All test data is **fictitious**.
 
 ## Features
@@ -21,7 +21,7 @@ REST API for managing a multi-doctor clinic: appointment scheduling, electronic 
 - [x] Audit log of every access to medical records
 - [x] Real-time chat between patients and the clinic
 - [ ] Appointment reminders via WhatsApp
-- [ ] File attachments (lab results, images)
+- [x] File attachments (lab results, images)
 - [ ] OpenAPI / Swagger documentation
 
 ## Roles
@@ -45,6 +45,7 @@ REST API for managing a multi-doctor clinic: appointment scheduling, electronic 
 - **Testing:** Vitest, Supertest and V8 coverage
 - **CI:** GitHub Actions and SonarQube Cloud
 - **Real time:** Socket.IO
+- **File uploads:** Multer (in memory), stored on disk behind a storage interface
 - **Coming soon:** WhatsApp Cloud API
 
 ## Requirements
@@ -84,6 +85,7 @@ To try the chat, open `http://localhost:3000/demo/chat.html` in two browser wind
 | `DATABASE_URL`      | Connection string used by Prisma and the API                                      | `postgresql://medical:medical@localhost:5433/medical_api?schema=public` |
 | `JWT_SECRET`        | Secret key used to sign JWTs                                                      | a long random string                                                    |
 | `CLINIC_TIMEZONE`   | Clinic time zone (IANA). Schedules use local time; appointments are stored in UTC | `America/Mexico_City`                                                   |
+| `UPLOADS_DIR`       | Folder for uploaded files (relative to where the API starts). Never committed     | `storage/uploads`                                                       |
 | `ADMIN_EMAIL`       | Email of the first admin account created by the seed                              | `admin@clinica.test`                                                    |
 | `ADMIN_PASSWORD`    | Password of that admin account (at least 12 characters)                           | a long password                                                         |
 
@@ -263,6 +265,24 @@ Each appointment includes `startsAt` and `endsAt` in UTC plus `date` and `time` 
 - Notes cannot be edited or deleted. Amendments always point to the original note, and only its author can add them.
 - Every read, change and denied attempt is saved in the audit log. A change and its audit entry are saved in the same transaction.
 
+### Attachments
+
+Lab results, images and other files in a patient's record.
+
+| Method | Path                                                      | Access                                   | Description                                                                                                                                                                                                              |
+| ------ | --------------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `POST` | `/patients/:patientId/attachments`                        | Treating doctor, the patient or employee | Uploads one file as `multipart/form-data`: `file` plus optional `category` (`lab_result`, `imaging`, `prescription`, `referral`, `other`), `description` and `clinicalNoteId` (doctors only, a note of the same patient) |
+| `GET`  | `/patients/:patientId/attachments`                        | Treating doctor, the patient or employee | Paginated, newest first. Employees only see the files they uploaded. Voided files are hidden; the doctor can add `?includeVoided=true`                                                                                   |
+| `GET`  | `/patients/:patientId/attachments/:attachmentId/download` | Treating doctor or the patient           | Downloads the file. Employees get `403`                                                                                                                                                                                  |
+| `POST` | `/patients/:patientId/attachments/:attachmentId/review`   | Treating doctor                          | Marks a file uploaded by the patient or the front desk as reviewed (`409` if it already was or is voided)                                                                                                                |
+| `POST` | `/patients/:patientId/attachments/:attachmentId/void`     | Treating doctor                          | Voids a wrong file with a `reason`: it is hidden but kept (`409` if it already was)                                                                                                                                      |
+
+- Only **PDF, JPEG, PNG and WebP** files up to **10 MB** are accepted (`415` and `413` otherwise). The type is detected from the file's first bytes, not from its name or the `Content-Type` sent by the client.
+- Each file is stored under a random name, outside public folders, with its SHA-256 hash. The original name is cleaned and only used in the download's `Content-Disposition`.
+- Downloads are always sent as attachments with `X-Content-Type-Options: nosniff` and `Cache-Control: private, no-store`.
+- Files are never deleted. Each response includes a `status`: `pending_review`, `reviewed` or `voided`. A doctor's own uploads count as reviewed.
+- Uploads, lists, downloads, reviews, voids and denied attempts are saved in the audit log, without file names (they may reveal clinical information).
+
 ### Audit log
 
 | Method | Path          | Access | Description                                                                                                                                                                      |
@@ -324,8 +344,9 @@ Errors are returned as `{ "error": "message" }`. Validation errors (`400`) also 
 | `audit_logs`        | Who accessed or changed which medical record and when, including denied attempts. Metadata only. Append-only                                                             |
 | `conversations`     | One conversation per patient with the clinic: status (`open`, `closed`), last message time and when each side last read it                                               |
 | `messages`          | Chat messages: conversation, sender, sender role (`patient` or `employee`) and text (1–2000 characters). Append-only                                                     |
+| `attachments`       | Files in the patient's record: original name, type, size, SHA-256 hash, storage key, category, who uploaded, reviewed and voided them. Never deleted                     |
 
-Besides the validation in the API, the database enforces its own rules with `CHECK` constraints (service durations, valid days and hours, time off ranges, blood types and amendment rules). `clinical_notes`, `audit_logs` and `messages` are **append-only**: a trigger rejects any `UPDATE` or `DELETE`, so not even a bug or a manual query can alter a note, the audit log or a message.
+Besides the validation in the API, the database enforces its own rules with `CHECK` constraints (service durations, valid days and hours, time off ranges, blood types and amendment rules). `clinical_notes`, `audit_logs` and `messages` are **append-only**: a trigger rejects any `UPDATE` or `DELETE`, so not even a bug or a manual query can alter a note, the audit log or a message. In `attachments` a trigger only allows setting the review and void fields, once.
 
 ### Double booking prevention
 
@@ -336,6 +357,8 @@ The `appointments` table has a PostgreSQL `EXCLUDE` constraint (with the `btree_
 ```
 .github/
 └── workflows/ci.yml        # CI: types, lint, format, tests and SonarQube analysis
+fixtures/
+└── sample-lab-result.pdf  # fictitious PDF to try uploads from requests.http
 prisma/
 ├── schema.prisma          # database models
 └── migrations/            # SQL migration history (including CHECK constraints)
@@ -361,6 +384,7 @@ src/
 │   ├── events.ts          # typed EventEmitter for domain events (e.g. a message was saved)
 │   ├── middlewares/       # 404 and error handlers
 │   ├── schemas/           # shared Zod schemas (ids, names, pagination, PATCH helpers)
+│   ├── storage/           # FileStorage interface and its local disk implementation
 │   └── utils/             # helpers: omitUndefined, HH:mm ↔ minutes, clinic time zone ↔ UTC, cookie reader
 ├── test/
 │   ├── global-setup.ts    # creates the test database and applies the migrations
@@ -382,6 +406,19 @@ src/
     │   ├── availability.routes.ts
     │   ├── availability.service.ts    # loads schedule, time off and appointments in parallel
     │   └── availability.ts            # computeSlots: pure function, no database access
+    ├── attachments/
+    │   ├── attachments.constants.ts  # allowed types and 10 MB limit
+    │   ├── attachments.controller.ts # download headers and streaming
+    │   ├── attachments.repository.ts # conditional updates for review and void
+    │   ├── attachments.routes.ts     # mounted under /patients/:patientId/attachments
+    │   ├── attachments.schema.ts
+    │   ├── attachments.service.ts    # access per role, upload without orphan files, audit
+    │   ├── attachments.types.ts      # response with status, without the storage key
+    │   ├── file-hash.ts              # SHA-256
+    │   ├── file-name.ts              # cleans the original file name
+    │   ├── file-type.ts              # detects PDF, JPEG, PNG and WebP from their first bytes
+    │   ├── upload.middleware.ts      # Multer in memory, 413 for large files
+    │   └── uploaded-file.ts          # checks an upload before it is stored
     ├── audit/
     │   ├── audit.controller.ts
     │   ├── audit.repository.ts
@@ -463,7 +500,7 @@ Each module groups its validation schema, types, data access, controller and rou
 7. ~~Medical records and audit log~~ ✅
 8. ~~Real-time chat~~ ✅
 9. WhatsApp reminders
-10. File attachments
+10. ~~File attachments~~ ✅
 11. Documentation, security and deployment
 
 ## Data privacy
