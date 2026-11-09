@@ -117,15 +117,18 @@ model TimeOff {
 }
 
 model Patient {
-  id            String   @id @default(uuid(7)) @db.Uuid
-  userId        String?  @unique @map("user_id") @db.Uuid
-  firstName     String   @map("first_name")
-  lastName      String   @map("last_name")
-  birthDate     DateTime @map("birth_date") @db.Date
-  phone         String
-  whatsappOptIn Boolean  @default(false) @map("whatsapp_opt_in")
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id                  String   @id @default(uuid(7)) @db.Uuid
+  userId              String?  @unique @map("user_id") @db.Uuid
+  firstName           String   @map("first_name")
+  lastName            String   @map("last_name")
+  birthDate           DateTime @map("birth_date") @db.Date
+  phone               String
+  // Email for reminders. If empty, the email of the patient's account is used.
+  contactEmail        String?  @map("contact_email")
+  emailRemindersOptIn Boolean  @default(false) @map("email_reminders_opt_in")
+  whatsappOptIn       Boolean  @default(false) @map("whatsapp_opt_in")
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   user           User?           @relation(fields: [userId], references: [id], onDelete: Restrict)
   appointments   Appointment[]
@@ -162,11 +165,12 @@ model Appointment {
   createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt          DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  patient      Patient       @relation(fields: [patientId], references: [id], onDelete: Restrict)
-  doctor       Doctor        @relation(fields: [doctorId], references: [id], onDelete: Restrict)
-  service      Service       @relation(fields: [serviceId], references: [id], onDelete: Restrict)
-  createdBy    User?         @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  patient      Patient               @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  doctor       Doctor                @relation(fields: [doctorId], references: [id], onDelete: Restrict)
+  service      Service               @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  createdBy    User?                 @relation(fields: [createdById], references: [id], onDelete: SetNull)
   clinicalNote ClinicalNote?
+  reminders    AppointmentReminder[]
 
   @@index([doctorId, startsAt])
   @@index([patientId, startsAt])
@@ -332,4 +336,44 @@ model Attachment {
   @@index([patientId, createdAt])
   @@index([uploadedById])
   @@map("attachments")
+}
+
+enum ReminderKind {
+  day_before
+}
+
+enum ReminderStatus {
+  pending
+  sent
+  failed
+  cancelled
+  skipped
+}
+
+enum ReminderChannel {
+  email
+  whatsapp
+}
+
+// Outbox of reminders: created with the appointment, sent later by a background worker.
+// The channel is chosen when sending, from the patient's consent at that moment.
+model AppointmentReminder {
+  id                String           @id @default(uuid(7)) @db.Uuid
+  appointmentId     String           @map("appointment_id") @db.Uuid
+  kind              ReminderKind     @default(day_before)
+  scheduledFor      DateTime         @map("scheduled_for") @db.Timestamptz(3)
+  status            ReminderStatus   @default(pending)
+  channel           ReminderChannel?
+  attempts          Int              @default(0)
+  lastError         String?          @map("last_error")
+  providerMessageId String?          @map("provider_message_id")
+  sentAt            DateTime?        @map("sent_at") @db.Timestamptz(3)
+  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+
+  @@unique([appointmentId, kind])
+  @@index([status, scheduledFor])
+  @@map("appointment_reminders")
 }

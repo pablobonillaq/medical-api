@@ -19,7 +19,7 @@ const uniqueEmail = (prefix: string) => `${prefix}-${next()}@test.com`
 
 // Empties every table. Each test starts from a clean database.
 export const resetDatabase = () =>
-  prisma.$executeRaw`TRUNCATE TABLE "attachments", "messages", "conversations", "audit_logs", "clinical_notes", "medical_histories", "appointments", "time_off", "schedule_blocks", "doctor_services", "patients", "doctors", "services", "users" CASCADE`
+  prisma.$executeRaw`TRUNCATE TABLE "appointment_reminders", "attachments", "messages", "conversations", "audit_logs", "clinical_notes", "medical_histories", "appointments", "time_off", "schedule_blocks", "doctor_services", "patients", "doctors", "services", "users" CASCADE`
 
 export const createUser = (role: Role) =>
   prisma.user.create({ data: { email: uniqueEmail(role), passwordHash, role } })

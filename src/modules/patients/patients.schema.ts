@@ -25,6 +25,8 @@ const phone = z
   .transform((value) => `+52${value.slice(-10)}`)
 
 const whatsappOptIn = z.boolean({ error: 'whatsappOptIn must be true or false' })
+// Consent to receive reminders by email; separate from WhatsApp consent
+const emailRemindersOptIn = z.boolean({ error: 'emailRemindersOptIn must be true or false' })
 
 export const createPatientSchema = z.object({
   firstName: personNameSchema('firstName'),
@@ -32,6 +34,9 @@ export const createPatientSchema = z.object({
   birthDate,
   phone,
   whatsappOptIn: whatsappOptIn.default(false),
+  // Optional: if empty, reminders use the email of the patient's account (if any)
+  contactEmail: emailSchema.nullable().default(null),
+  emailRemindersOptIn: emailRemindersOptIn.default(false),
 })
 
 // No defaults here: a missing field must stay undefined so it is not overwritten
@@ -42,6 +47,9 @@ export const updatePatientSchema = z
     birthDate: birthDate.optional(),
     phone: phone.optional(),
     whatsappOptIn: whatsappOptIn.optional(),
+    // null removes the contact email
+    contactEmail: emailSchema.nullable().optional(),
+    emailRemindersOptIn: emailRemindersOptIn.optional(),
   })
   .refine(hasAtLeastOneField, { error: 'Send at least one field to update' })
 

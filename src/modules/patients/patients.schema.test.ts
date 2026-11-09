@@ -42,3 +42,29 @@ describe('updatePatientSchema', () => {
     expect(updatePatientSchema.safeParse({}).success).toBe(false)
   })
 })
+
+describe('reminder contact fields', () => {
+  it('defaults to no contact email and no email reminders', () => {
+    const result = createPatientSchema.parse(validPatient)
+
+    expect(result).toMatchObject({ contactEmail: null, emailRemindersOptIn: false })
+  })
+
+  it('normalizes the contact email', () => {
+    const result = createPatientSchema.parse({ ...validPatient, contactEmail: ' Luz@Correo.TEST ' })
+
+    expect(result.contactEmail).toBe('luz@correo.test')
+  })
+
+  it('rejects an invalid contact email', () => {
+    const result = createPatientSchema.safeParse({ ...validPatient, contactEmail: 'luz@' })
+
+    expect(result.success).toBe(false)
+  })
+
+  it('lets an update remove the contact email with null', () => {
+    const result = updatePatientSchema.parse({ contactEmail: null })
+
+    expect(result).toEqual({ contactEmail: null })
+  })
+})
