@@ -42,6 +42,8 @@ const envSchema = z.object({
   SMTP_USER: z.string().min(1).optional(),
   SMTP_PASSWORD: z.string().min(1).optional(),
   MAIL_FROM: z.string().min(3).default('Clínica <no-reply@clinica.test>'),
+  // Turns off the background worker that sends reminders (e.g. in a second API instance)
+  REMINDERS_ENABLED: z.stringbool().default(true),
 })
 
 const result = envSchema

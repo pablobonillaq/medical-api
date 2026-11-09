@@ -2,6 +2,7 @@ import { prisma } from '../../db/prisma.js'
 import type { Prisma } from '../../generated/prisma/client.js'
 import type { AppointmentStatus } from '../../generated/prisma/enums.js'
 import { ACTIVE_STATUSES } from './appointments.constants.js'
+import { remindersRepository } from '../reminders/reminders.repository.js'
 
 export const appointmentInclude = {
   patient: { select: { id: true, firstName: true, lastName: true, phone: true, userId: true } },
@@ -73,28 +74,49 @@ export const appointmentsRepository = {
       prisma.appointment.count({ where }),
     ]),
 
+  // Each write also schedules, moves or cancels the appointment's reminder in the same
+  // transaction: an appointment never exists without its reminder, or the other way around.
   create: (data: CreateAppointmentData) =>
-    prisma.appointment.create({ data, include: appointmentInclude }),
+    prisma.$transaction(async (tx) => {
+      const appointment = await tx.appointment.create({ data, include: appointmentInclude })
+      await remindersRepository.scheduleFor(appointment.id, appointment.startsAt, tx)
+      return appointment
+    }),
 
   cancel: (id: string, reason: string | null) =>
-    prisma.appointment.update({
-      where: { id },
-      data: { status: 'cancelled', cancelledAt: new Date(), cancellationReason: reason },
-      include: appointmentInclude,
+    prisma.$transaction(async (tx) => {
+      const appointment = await tx.appointment.update({
+        where: { id },
+        data: { status: 'cancelled', cancelledAt: new Date(), cancellationReason: reason },
+        include: appointmentInclude,
+      })
+      await remindersRepository.cancelFor(id, tx)
+      return appointment
     }),
 
-  // A rescheduled appointment needs to be confirmed again
+  // A rescheduled appointment needs to be confirmed again, and its reminder moves with it
   reschedule: (id: string, startsAt: Date, endsAt: Date) =>
-    prisma.appointment.update({
-      where: { id },
-      data: { startsAt, endsAt, status: 'scheduled' },
-      include: appointmentInclude,
+    prisma.$transaction(async (tx) => {
+      const appointment = await tx.appointment.update({
+        where: { id },
+        data: { startsAt, endsAt, status: 'scheduled' },
+        include: appointmentInclude,
+      })
+      await remindersRepository.scheduleFor(id, startsAt, tx)
+      return appointment
     }),
 
+  // Once an appointment took place (or the patient did not come), no reminder is needed
   updateStatus: (id: string, status: AppointmentStatus) =>
-    prisma.appointment.update({
-      where: { id },
-      data: { status },
-      include: appointmentInclude,
+    prisma.$transaction(async (tx) => {
+      const appointment = await tx.appointment.update({
+        where: { id },
+        data: { status },
+        include: appointmentInclude,
+      })
+      if (status === 'completed' || status === 'no_show') {
+        await remindersRepository.cancelFor(id, tx)
+      }
+      return appointment
     }),
 }
