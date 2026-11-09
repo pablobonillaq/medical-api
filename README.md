@@ -6,9 +6,9 @@
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=pablobonillaq_medical-api&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=pablobonillaq_medical-api)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=pablobonillaq_medical-api&metric=coverage)](https://sonarcloud.io/summary/new_code?id=pablobonillaq_medical-api)
 
-REST API for managing a multi-doctor clinic: appointment scheduling, electronic medical records, patient–clinic chat, and appointment reminders via WhatsApp.
+REST API for managing a multi-doctor clinic: appointment scheduling, electronic medical records, patient–clinic chat, and appointment reminders by email (WhatsApp planned).
 
-> **Status:** in development. Phases 1–8 and 10 completed (base setup, database, authentication and roles, catalogs, appointments, tests and CI, medical records and audit log, real-time chat, file attachments); next: WhatsApp reminders (phase 9).
+> **Status:** in development. Phases 1–10 completed (base setup, database, authentication and roles, catalogs, appointments, tests and CI, medical records and audit log, real-time chat, appointment reminders by email, file attachments); next: documentation, security and deployment. WhatsApp will be added later as a second reminder channel.
 > Portfolio project. All test data is **fictitious**.
 
 ## Features
@@ -20,7 +20,7 @@ REST API for managing a multi-doctor clinic: appointment scheduling, electronic 
 - [x] Medical records: medical history and append-only clinical notes (never edited or deleted)
 - [x] Audit log of every access to medical records
 - [x] Real-time chat between patients and the clinic
-- [ ] Appointment reminders via WhatsApp
+- [x] Appointment reminders by email, sent by a background worker (WhatsApp channel planned)
 - [x] File attachments (lab results, images)
 - [ ] OpenAPI / Swagger documentation
 
@@ -46,6 +46,7 @@ REST API for managing a multi-doctor clinic: appointment scheduling, electronic 
 - **CI:** GitHub Actions and SonarQube Cloud
 - **Real time:** Socket.IO
 - **File uploads:** Multer (in memory), stored on disk behind a storage interface
+- **Email:** Nodemailer (SMTP), with Mailpit catching every email in development
 - **Coming soon:** WhatsApp Cloud API
 
 ## Requirements
@@ -61,7 +62,7 @@ git clone <repository-url>
 cd medical-api
 npm install            # also generates the Prisma client
 cp .env.example .env   # then fill in the values
-npm run db:up          # starts PostgreSQL in Docker
+npm run db:up          # starts PostgreSQL and Mailpit in Docker
 npm run db:migrate     # applies the database migrations
 npm run db:seed        # creates the first admin account (ADMIN_EMAIL / ADMIN_PASSWORD)
 npm run dev
@@ -70,6 +71,8 @@ npm run dev
 Check that everything works at `GET http://localhost:3000/health`.
 
 To try the chat, open `http://localhost:3000/demo/chat.html` in two browser windows (one private): log in as a patient in one and as a front desk employee in the other. The demo page is not served in production.
+
+Every email (such as appointment reminders) goes to Mailpit, never to real inboxes: open `http://localhost:8025` to read them. `npm run mail:test` sends a sample reminder.
 
 > The database is exposed on port **5433** to avoid conflicts with a local PostgreSQL installation using 5432.
 
@@ -86,6 +89,14 @@ To try the chat, open `http://localhost:3000/demo/chat.html` in two browser wind
 | `JWT_SECRET`        | Secret key used to sign JWTs                                                      | a long random string                                                    |
 | `CLINIC_TIMEZONE`   | Clinic time zone (IANA). Schedules use local time; appointments are stored in UTC | `America/Mexico_City`                                                   |
 | `UPLOADS_DIR`       | Folder for uploaded files (relative to where the API starts). Never committed     | `storage/uploads`                                                       |
+| `CLINIC_NAME`       | Clinic name shown in messages to patients                                         | `Clínica`                                                               |
+| `SMTP_HOST`         | SMTP server for outgoing email (Mailpit in development)                           | `localhost`                                                             |
+| `SMTP_PORT`         | SMTP port                                                                         | `1025`                                                                  |
+| `SMTP_SECURE`       | Use TLS from the start of the connection (usually `true` with port 465)           | `false`                                                                 |
+| `SMTP_USER`         | SMTP user (leave it out together with `SMTP_PASSWORD` when not needed)            |                                                                         |
+| `SMTP_PASSWORD`     | SMTP password                                                                     |                                                                         |
+| `MAIL_FROM`         | Sender of the emails                                                              | `Clínica <no-reply@clinica.test>`                                       |
+| `REMINDERS_ENABLED` | Starts the worker that sends reminders                                            | `true`                                                                  |
 | `ADMIN_EMAIL`       | Email of the first admin account created by the seed                              | `admin@clinica.test`                                                    |
 | `ADMIN_PASSWORD`    | Password of that admin account (at least 12 characters)                           | a long password                                                         |
 
@@ -93,24 +104,25 @@ The `POSTGRES_*` values must match the user, password and database in `DATABASE_
 
 ## Scripts
 
-| Command                 | Description                                                  |
-| ----------------------- | ------------------------------------------------------------ |
-| `npm run dev`           | Starts the development server with hot reload                |
-| `npm run typecheck`     | Type-checks the code with TypeScript                         |
-| `npm run lint`          | Lints the code with ESLint                                   |
-| `npm run format`        | Formats the code with Prettier                               |
-| `npm run check`         | Runs typecheck, lint, the format check and the unit tests    |
-| `npm test`              | Runs all tests (unit and integration)                        |
-| `npm run test:unit`     | Runs the unit tests (no database needed)                     |
-| `npm run test:int`      | Runs the integration tests against the test database         |
-| `npm run test:watch`    | Runs the unit tests in watch mode                            |
-| `npm run test:coverage` | Runs all tests and generates the coverage report             |
-| `npm run db:up`         | Starts the PostgreSQL container                              |
-| `npm run db:down`       | Stops the PostgreSQL container (data is kept)                |
-| `npm run db:migrate`    | Creates and applies migrations from the Prisma schema        |
-| `npm run db:generate`   | Generates the Prisma client                                  |
-| `npm run db:studio`     | Opens Prisma Studio to browse the data                       |
-| `npm run db:seed`       | Creates the first admin account (safe to run more than once) |
+| Command                 | Description                                                                     |
+| ----------------------- | ------------------------------------------------------------------------------- |
+| `npm run dev`           | Starts the development server with hot reload                                   |
+| `npm run typecheck`     | Type-checks the code with TypeScript                                            |
+| `npm run lint`          | Lints the code with ESLint                                                      |
+| `npm run format`        | Formats the code with Prettier                                                  |
+| `npm run check`         | Runs typecheck, lint, the format check and the unit tests                       |
+| `npm test`              | Runs all tests (unit and integration)                                           |
+| `npm run test:unit`     | Runs the unit tests (no database needed)                                        |
+| `npm run test:int`      | Runs the integration tests against the test database                            |
+| `npm run test:watch`    | Runs the unit tests in watch mode                                               |
+| `npm run test:coverage` | Runs all tests and generates the coverage report                                |
+| `npm run db:up`         | Starts the PostgreSQL container                                                 |
+| `npm run db:down`       | Stops the PostgreSQL container (data is kept)                                   |
+| `npm run db:migrate`    | Creates and applies migrations from the Prisma schema                           |
+| `npm run db:generate`   | Generates the Prisma client                                                     |
+| `npm run db:studio`     | Opens Prisma Studio to browse the data                                          |
+| `npm run db:seed`       | Creates the first admin account (safe to run more than once)                    |
+| `npm run mail:test`     | Sends a sample reminder through the configured SMTP server (Mailpit by default) |
 
 ## Testing
 
@@ -201,7 +213,7 @@ Days go from `1` (Monday) to `7` (Sunday). Times use `HH:mm` in the clinic's loc
 | `GET`   | `/patients/:id`           | Admin, employee or the patient | Returns a patient. Other patients get `404`, so ids are not revealed                                                                                                 |
 | `PATCH` | `/patients/:id`           | Employee or the patient        | Updates the profile. Admins cannot edit patient data                                                                                                                 |
 
-Phones are accepted as `55 1234 5678`, `(55) 1234-5678` or `+52…` and always stored in E.164 format (`+525512345678`), as WhatsApp requires. `birthDate` uses `YYYY-MM-DD`. `whatsappOptIn` records the patient's consent to receive reminders and defaults to `false`.
+Phones are accepted as `55 1234 5678`, `(55) 1234-5678` or `+52…` and always stored in E.164 format (`+525512345678`), as WhatsApp requires. `birthDate` uses `YYYY-MM-DD`. `whatsappOptIn` and `emailRemindersOptIn` record the patient's consent to receive reminders on each channel and default to `false`. `contactEmail` is an optional email for reminders, useful for patients without an account (`null` removes it); when it is empty, the account's email is used.
 
 ### Availability
 
@@ -248,6 +260,15 @@ Status changes follow a state machine:
 Patients (or staff) confirm upcoming appointments; doctors (or staff) record `completed` or `no_show` once the appointment has started. A rescheduled appointment goes back to `scheduled`.
 
 Each appointment includes `startsAt` and `endsAt` in UTC plus `date` and `time` in the clinic's local time. If two requests book the same slot at the same moment, the database accepts one and the other gets `409`.
+
+### Appointment reminders
+
+There are no endpoints: reminders follow the appointments.
+
+- Booking an appointment schedules a reminder **24 hours before** it (or right away if there is less time left, but never for an appointment less than 2 hours away). Rescheduling moves it, and cancelling the appointment or recording `completed` or `no_show` cancels it. All of this happens in the same transaction as the appointment change.
+- A background worker checks every minute for due reminders. Right before sending, it checks again that the appointment is still active and that the patient agreed to reminders on a channel; otherwise the reminder is `cancelled` or `skipped`.
+- Failed sends are retried after 1, 5, 15 and 60 minutes, then marked `failed`. Reminders are claimed with `FOR UPDATE SKIP LOCKED`, so two API instances never send the same one.
+- Channels sit behind a `ReminderChannel` interface. Email is the only one today; WhatsApp can be added without changing the scheduling or the worker.
 
 ### Medical records
 
@@ -329,22 +350,23 @@ Errors are returned as `{ "error": "message" }`. Validation errors (`400`) also 
 
 ## Data model
 
-| Table               | Description                                                                                                                                                              |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `users`             | Accounts: email, password hash, role and `active` status                                                                                                                 |
-| `doctors`           | Doctor profile (1:1 with `users`): name, specialty and unique license number                                                                                             |
-| `services`          | Services offered by the clinic, with their duration in minutes                                                                                                           |
-| `doctor_services`   | Many-to-many relation: which services each doctor offers                                                                                                                 |
-| `schedule_blocks`   | Weekly schedule: day (1 = Monday … 7 = Sunday) and start/end in minutes since midnight, clinic time                                                                      |
-| `patients`          | Patient profile: name, birth date, phone (E.164) and WhatsApp consent. The user account is optional                                                                      |
-| `time_off`          | Days off and absences of each doctor (exact start and end timestamps)                                                                                                    |
-| `appointments`      | Appointments: patient, doctor, service, start and end (UTC), status (`scheduled`, `confirmed`, `cancelled`, `completed`, `no_show`) and cancellation data. Never deleted |
-| `medical_histories` | Medical history of each patient (1:1): blood type, allergies, chronic conditions, medications, surgical and family history, and who last updated it                      |
-| `clinical_notes`    | SOAP notes, optionally linked to an appointment (one note per appointment). Amendments are new rows that point to the original note. Append-only                         |
-| `audit_logs`        | Who accessed or changed which medical record and when, including denied attempts. Metadata only. Append-only                                                             |
-| `conversations`     | One conversation per patient with the clinic: status (`open`, `closed`), last message time and when each side last read it                                               |
-| `messages`          | Chat messages: conversation, sender, sender role (`patient` or `employee`) and text (1–2000 characters). Append-only                                                     |
-| `attachments`       | Files in the patient's record: original name, type, size, SHA-256 hash, storage key, category, who uploaded, reviewed and voided them. Never deleted                     |
+| Table                   | Description                                                                                                                                                                   |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `users`                 | Accounts: email, password hash, role and `active` status                                                                                                                      |
+| `doctors`               | Doctor profile (1:1 with `users`): name, specialty and unique license number                                                                                                  |
+| `services`              | Services offered by the clinic, with their duration in minutes                                                                                                                |
+| `doctor_services`       | Many-to-many relation: which services each doctor offers                                                                                                                      |
+| `schedule_blocks`       | Weekly schedule: day (1 = Monday … 7 = Sunday) and start/end in minutes since midnight, clinic time                                                                           |
+| `patients`              | Patient profile: name, birth date, phone (E.164), optional contact email and consent for WhatsApp and email reminders. The user account is optional                           |
+| `time_off`              | Days off and absences of each doctor (exact start and end timestamps)                                                                                                         |
+| `appointments`          | Appointments: patient, doctor, service, start and end (UTC), status (`scheduled`, `confirmed`, `cancelled`, `completed`, `no_show`) and cancellation data. Never deleted      |
+| `medical_histories`     | Medical history of each patient (1:1): blood type, allergies, chronic conditions, medications, surgical and family history, and who last updated it                           |
+| `clinical_notes`        | SOAP notes, optionally linked to an appointment (one note per appointment). Amendments are new rows that point to the original note. Append-only                              |
+| `audit_logs`            | Who accessed or changed which medical record and when, including denied attempts. Metadata only. Append-only                                                                  |
+| `conversations`         | One conversation per patient with the clinic: status (`open`, `closed`), last message time and when each side last read it                                                    |
+| `messages`              | Chat messages: conversation, sender, sender role (`patient` or `employee`) and text (1–2000 characters). Append-only                                                          |
+| `attachments`           | Files in the patient's record: original name, type, size, SHA-256 hash, storage key, category, who uploaded, reviewed and voided them. Never deleted                          |
+| `appointment_reminders` | Reminders waiting to be sent (outbox): appointment, time, status (`pending`, `sent`, `failed`, `cancelled`, `skipped`), channel, attempts and last error. One per appointment |
 
 Besides the validation in the API, the database enforces its own rules with `CHECK` constraints (service durations, valid days and hours, time off ranges, blood types and amendment rules). `clinical_notes`, `audit_logs` and `messages` are **append-only**: a trigger rejects any `UPDATE` or `DELETE`, so not even a bug or a manual query can alter a note, the audit log or a message. In `attachments` a trigger only allows setting the review and void fields, once.
 
@@ -379,9 +401,12 @@ src/
 │   ├── rooms.ts           # user:<id> and staff rooms
 │   ├── socket-server.ts   # Socket.IO server, cookie authentication, session expiry
 │   └── socket.types.ts    # typed events between server and clients
+├── scripts/
+│   └── send-test-reminder.ts  # sends a sample reminder (npm run mail:test)
 ├── shared/
 │   ├── errors/            # custom error classes
 │   ├── events.ts          # typed EventEmitter for domain events (e.g. a message was saved)
+│   ├── mail/              # MailTransport interface and SMTP with Nodemailer
 │   ├── middlewares/       # 404 and error handlers
 │   ├── schemas/           # shared Zod schemas (ids, names, pagination, PATCH helpers)
 │   ├── storage/           # FileStorage interface and its local disk implementation
@@ -467,6 +492,15 @@ src/
     │   ├── patients.schema.ts       # phone normalization and dates
     │   ├── patients.service.ts      # access rules (staff or the patient)
     │   └── patients.types.ts
+    ├── reminders/
+    │   ├── channels/
+    │   │   ├── email.channel.ts            # the email ReminderChannel
+    │   │   └── reminder-email.template.ts  # reminder in Spanish, text and HTML
+    │   ├── reminder-schedule.ts   # when to send and when to retry (pure functions)
+    │   ├── reminder.types.ts      # ReminderChannel interface, recipient and content
+    │   ├── reminders.constants.ts
+    │   ├── reminders.repository.ts # schedule, cancel, claim with FOR UPDATE SKIP LOCKED
+    │   └── reminders.worker.ts    # sends due reminders every minute, with retries
     ├── schedules/
     │   ├── schedules.controller.ts
     │   ├── schedules.repository.ts
@@ -499,7 +533,7 @@ Each module groups its validation schema, types, data access, controller and rou
 6. ~~Automated tests (Vitest), CI and code coverage (SonarQube)~~ ✅
 7. ~~Medical records and audit log~~ ✅
 8. ~~Real-time chat~~ ✅
-9. WhatsApp reminders
+9. ~~Appointment reminders (email)~~ ✅ — WhatsApp channel pending
 10. ~~File attachments~~ ✅
 11. Documentation, security and deployment
 

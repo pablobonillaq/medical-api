@@ -1474,6 +1474,80 @@ GET {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}/attachme
 
 
 # =============================================================================
+# Reminders / Recordatorios
+# Reminders have no endpoints: booking an appointment schedules one 24 h before.
+# Los recordatorios no tienen endpoints: agendar una cita programa uno 24 h antes.
+#
+# To see one in Mailpit (http://localhost:8025) without waiting:
+# Para verlo en Mailpit (http://localhost:8025) sin esperar:
+#   1. Run these requests / Ejecuta estas peticiones
+#   2. Book an appointment (Appointments section) / Agenda una cita (sección Appointments)
+#   3. docker exec medical-db psql -U medical -d medical_api -c "UPDATE appointment_reminders SET scheduled_for = now() WHERE status = 'pending';"
+#   4. Wait up to a minute / Espera hasta un minuto
+# =============================================================================
+
+### Patient login → 200
+# Login de paciente → 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "{{patientEmail}}", "password": "{{patientPassword}}" }
+
+### Patient agrees to email reminders → 200 (emailRemindersOptIn: true)
+# La paciente acepta recordatorios por correo → 200 (emailRemindersOptIn: true)
+PATCH {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}
+Content-Type: application/json
+
+{ "emailRemindersOptIn": true }
+
+### Reminders to another address → 200 (contactEmail is used instead of the account email)
+# Recordatorios a otro correo → 200 (se usa contactEmail en lugar del correo de la cuenta)
+PATCH {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}
+Content-Type: application/json
+
+{ "contactEmail": "Luz.Mendez@Correo.TEST" }
+
+### Invalid contact email → 400
+# Correo de contacto inválido → 400
+PATCH {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}
+Content-Type: application/json
+
+{ "contactEmail": "luz@" }
+
+### Back to the account email → 200 (contactEmail: null)
+# Volver al correo de la cuenta → 200 (contactEmail: null)
+PATCH {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}
+Content-Type: application/json
+
+{ "contactEmail": null }
+
+### Check the profile → 200 (contactEmail, emailRemindersOptIn)
+# Revisar el perfil → 200 (contactEmail, emailRemindersOptIn)
+GET {{baseUrl}}/patients/me
+
+### Employee login → 200
+# Login de empleado → 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "{{employeeEmail}}", "password": "{{employeePassword}}" }
+
+### Front desk registers a patient without an account, with email reminders → 201
+# Recepción registra a un paciente sin cuenta, con recordatorios por correo → 201
+POST {{baseUrl}}/patients
+Content-Type: application/json
+
+{
+  "firstName": "Ramón",
+  "lastName": "Soto",
+  "birthDate": "1958-03-14",
+  "phone": "55 8765 4321",
+  "contactEmail": "ramon.soto@correo.test",
+  "emailRemindersOptIn": true
+}
+
+
+# =============================================================================
 # Permissions (patient) / Permisos (paciente)
 # =============================================================================
 

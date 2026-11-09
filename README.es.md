@@ -6,9 +6,9 @@
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=pablobonillaq_medical-api&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=pablobonillaq_medical-api)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=pablobonillaq_medical-api&metric=coverage)](https://sonarcloud.io/summary/new_code?id=pablobonillaq_medical-api)
 
-API REST para la gestión de una clínica con varios médicos: agenda de citas, expedientes clínicos, chat entre pacientes y clínica, y recordatorios de citas por WhatsApp.
+API REST para la gestión de una clínica con varios médicos: agenda de citas, expedientes clínicos, chat entre pacientes y clínica, y recordatorios de citas por correo (WhatsApp más adelante).
 
-> **Estado:** en desarrollo. Fases 1–8 y 10 completadas (configuración base, base de datos, autenticación y roles, catálogos, citas, pruebas e integración continua, expediente clínico y auditoría, chat en tiempo real, archivos adjuntos); siguen los recordatorios por WhatsApp (fase 9).
+> **Estado:** en desarrollo. Fases 1–10 completadas (configuración base, base de datos, autenticación y roles, catálogos, citas, pruebas e integración continua, expediente clínico y auditoría, chat en tiempo real, recordatorios de citas por correo, archivos adjuntos); siguen la documentación, la seguridad y el despliegue. WhatsApp se agregará después como un segundo canal de recordatorios.
 > Proyecto de portafolio. Todos los datos de pruebas son **ficticios**.
 
 ## Funcionalidades
@@ -20,7 +20,7 @@ API REST para la gestión de una clínica con varios médicos: agenda de citas, 
 - [x] Expediente clínico: antecedentes y notas clínicas que no se editan ni se borran
 - [x] Registro de auditoría de cada acceso a expedientes
 - [x] Chat en tiempo real entre pacientes y clínica
-- [ ] Recordatorios de citas por WhatsApp
+- [x] Recordatorios de citas por correo, enviados por un proceso en segundo plano (canal de WhatsApp pendiente)
 - [x] Archivos adjuntos (estudios de laboratorio, imágenes)
 - [ ] Documentación con OpenAPI / Swagger
 
@@ -46,6 +46,7 @@ API REST para la gestión de una clínica con varios médicos: agenda de citas, 
 - **Integración continua:** GitHub Actions y SonarQube Cloud
 - **Tiempo real:** Socket.IO
 - **Subida de archivos:** Multer (en memoria), guardados en disco detrás de una interfaz de almacenamiento
+- **Correo:** Nodemailer (SMTP), con Mailpit atrapando todos los correos en desarrollo
 - **Por agregar:** WhatsApp Cloud API
 
 ## Requisitos
@@ -61,7 +62,7 @@ git clone <url-del-repositorio>
 cd medical-api
 npm install            # también genera el cliente de Prisma
 cp .env.example .env   # y completa los valores
-npm run db:up          # levanta PostgreSQL en Docker
+npm run db:up          # levanta PostgreSQL y Mailpit en Docker
 npm run db:migrate     # aplica las migraciones
 npm run db:seed        # crea la primera cuenta de admin (ADMIN_EMAIL / ADMIN_PASSWORD)
 npm run dev
@@ -70,6 +71,8 @@ npm run dev
 Comprueba que todo funciona en `GET http://localhost:3000/health`.
 
 Para probar el chat, abre `http://localhost:3000/demo/chat.html` en dos ventanas del navegador (una privada): inicia sesión como paciente en una y como empleado de recepción en la otra. La página de prueba no se sirve en producción.
+
+Todos los correos (como los recordatorios de citas) llegan a Mailpit, nunca a buzones reales: ábrelo en `http://localhost:8025` para leerlos. `npm run mail:test` envía un recordatorio de ejemplo.
 
 > La base de datos se expone en el puerto **5433** para no chocar con una instalación local de PostgreSQL que use el 5432.
 
@@ -86,6 +89,14 @@ Para probar el chat, abre `http://localhost:3000/demo/chat.html` en dos ventanas
 | `JWT_SECRET`        | Clave para firmar los tokens JWT                                                             | una cadena larga y aleatoria                                            |
 | `CLINIC_TIMEZONE`   | Zona horaria de la clínica (IANA). Los horarios usan hora local; las citas se guardan en UTC | `America/Mexico_City`                                                   |
 | `UPLOADS_DIR`       | Carpeta de los archivos subidos (relativa a donde se inicia la API). Nunca se sube a git     | `storage/uploads`                                                       |
+| `CLINIC_NAME`       | Nombre de la clínica en los mensajes a pacientes                                             | `Clínica`                                                               |
+| `SMTP_HOST`         | Servidor SMTP para enviar correos (Mailpit en desarrollo)                                    | `localhost`                                                             |
+| `SMTP_PORT`         | Puerto SMTP                                                                                  | `1025`                                                                  |
+| `SMTP_SECURE`       | Usar TLS desde el inicio de la conexión (normalmente `true` con el puerto 465)               | `false`                                                                 |
+| `SMTP_USER`         | Usuario SMTP (omítelo junto con `SMTP_PASSWORD` si no se necesita)                           |                                                                         |
+| `SMTP_PASSWORD`     | Contraseña SMTP                                                                              |                                                                         |
+| `MAIL_FROM`         | Remitente de los correos                                                                     | `Clínica <no-reply@clinica.test>`                                       |
+| `REMINDERS_ENABLED` | Inicia el proceso que envía los recordatorios                                                | `true`                                                                  |
 | `ADMIN_EMAIL`       | Email de la primera cuenta de admin que crea el seed                                         | `admin@clinica.test`                                                    |
 | `ADMIN_PASSWORD`    | Contraseña de esa cuenta de admin (mínimo 12 caracteres)                                     | una contraseña larga                                                    |
 
@@ -93,24 +104,25 @@ Los valores de `POSTGRES_*` deben coincidir con el usuario, la contraseña y la 
 
 ## Scripts
 
-| Comando                 | Descripción                                                             |
-| ----------------------- | ----------------------------------------------------------------------- |
-| `npm run dev`           | Inicia el servidor en modo desarrollo con recarga automática            |
-| `npm run typecheck`     | Verifica los tipos con TypeScript                                       |
-| `npm run lint`          | Revisa el código con ESLint                                             |
-| `npm run format`        | Formatea el código con Prettier                                         |
-| `npm run check`         | Ejecuta typecheck, lint, la revisión de formato y las pruebas unitarias |
-| `npm test`              | Ejecuta todas las pruebas (unitarias y de integración)                  |
-| `npm run test:unit`     | Ejecuta las pruebas unitarias (no necesitan base de datos)              |
-| `npm run test:int`      | Ejecuta las pruebas de integración con la base de datos de pruebas      |
-| `npm run test:watch`    | Ejecuta las pruebas unitarias en modo watch                             |
-| `npm run test:coverage` | Ejecuta todas las pruebas y genera el reporte de cobertura              |
-| `npm run db:up`         | Levanta el contenedor de PostgreSQL                                     |
-| `npm run db:down`       | Detiene el contenedor de PostgreSQL (los datos se conservan)            |
-| `npm run db:migrate`    | Crea y aplica migraciones a partir del schema de Prisma                 |
-| `npm run db:generate`   | Genera el cliente de Prisma                                             |
-| `npm run db:studio`     | Abre Prisma Studio para ver los datos                                   |
-| `npm run db:seed`       | Crea la primera cuenta de admin (se puede ejecutar varias veces)        |
+| Comando                 | Descripción                                                                             |
+| ----------------------- | --------------------------------------------------------------------------------------- |
+| `npm run dev`           | Inicia el servidor en modo desarrollo con recarga automática                            |
+| `npm run typecheck`     | Verifica los tipos con TypeScript                                                       |
+| `npm run lint`          | Revisa el código con ESLint                                                             |
+| `npm run format`        | Formatea el código con Prettier                                                         |
+| `npm run check`         | Ejecuta typecheck, lint, la revisión de formato y las pruebas unitarias                 |
+| `npm test`              | Ejecuta todas las pruebas (unitarias y de integración)                                  |
+| `npm run test:unit`     | Ejecuta las pruebas unitarias (no necesitan base de datos)                              |
+| `npm run test:int`      | Ejecuta las pruebas de integración con la base de datos de pruebas                      |
+| `npm run test:watch`    | Ejecuta las pruebas unitarias en modo watch                                             |
+| `npm run test:coverage` | Ejecuta todas las pruebas y genera el reporte de cobertura                              |
+| `npm run db:up`         | Levanta el contenedor de PostgreSQL                                                     |
+| `npm run db:down`       | Detiene el contenedor de PostgreSQL (los datos se conservan)                            |
+| `npm run db:migrate`    | Crea y aplica migraciones a partir del schema de Prisma                                 |
+| `npm run db:generate`   | Genera el cliente de Prisma                                                             |
+| `npm run db:studio`     | Abre Prisma Studio para ver los datos                                                   |
+| `npm run db:seed`       | Crea la primera cuenta de admin (se puede ejecutar varias veces)                        |
+| `npm run mail:test`     | Envía un recordatorio de ejemplo por el servidor SMTP configurado (Mailpit por defecto) |
 
 ## Pruebas
 
@@ -201,7 +213,7 @@ Los días van de `1` (lunes) a `7` (domingo). Las horas usan `HH:mm` en hora loc
 | `GET`   | `/patients/:id`           | Admin, empleado o el paciente | Devuelve un paciente. Para otros pacientes responde `404`, así no se revelan ids                                                                                                   |
 | `PATCH` | `/patients/:id`           | Empleado o el paciente        | Actualiza el perfil. El admin no puede editar datos de pacientes                                                                                                                   |
 
-El teléfono se acepta como `55 1234 5678`, `(55) 1234-5678` o `+52…` y siempre se guarda en formato E.164 (`+525512345678`), como lo exige WhatsApp. `birthDate` usa `AAAA-MM-DD`. `whatsappOptIn` guarda el consentimiento del paciente para recibir recordatorios y por defecto es `false`.
+El teléfono se acepta como `55 1234 5678`, `(55) 1234-5678` o `+52…` y siempre se guarda en formato E.164 (`+525512345678`), como lo exige WhatsApp. `birthDate` usa `AAAA-MM-DD`. `whatsappOptIn` y `emailRemindersOptIn` guardan el consentimiento del paciente para recibir recordatorios por cada canal y por defecto son `false`. `contactEmail` es un correo opcional para recordatorios, útil para pacientes sin cuenta (`null` lo borra); si está vacío, se usa el correo de la cuenta.
 
 ### Disponibilidad
 
@@ -248,6 +260,15 @@ Los cambios de estado siguen una máquina de estados:
 El paciente (o el personal) confirma las citas futuras; el médico (o el personal) registra `completed` o `no_show` una vez que la cita empezó. Una cita reprogramada vuelve a `scheduled`.
 
 Cada cita incluye `startsAt` y `endsAt` en UTC, y `date` y `time` en hora local de la clínica. Si dos peticiones agendan el mismo horario en el mismo momento, la base de datos acepta una y la otra recibe `409`.
+
+### Recordatorios de citas
+
+No hay endpoints: los recordatorios siguen a las citas.
+
+- Agendar una cita programa un recordatorio **24 horas antes** (o de inmediato si falta menos, pero nunca para una cita a menos de 2 horas). Reprogramarla lo mueve, y cancelarla o registrar `completed` o `no_show` lo cancela. Todo ocurre en la misma transacción que el cambio de la cita.
+- Un proceso en segundo plano revisa cada minuto los recordatorios pendientes. Justo antes de enviar, vuelve a comprobar que la cita siga activa y que el paciente haya aceptado recordatorios por algún canal; si no, el recordatorio queda `cancelled` o `skipped`.
+- Los envíos fallidos se reintentan a los 1, 5, 15 y 60 minutos, y después quedan `failed`. Los recordatorios se toman con `FOR UPDATE SKIP LOCKED`, así que dos instancias de la API nunca envían el mismo.
+- Los canales están detrás de una interfaz `ReminderChannel`. Hoy solo existe el correo; WhatsApp se puede agregar sin cambiar la programación ni el proceso de envío.
 
 ### Expediente clínico
 
@@ -329,22 +350,23 @@ Los errores se devuelven como `{ "error": "mensaje" }`. Los errores de validaci�
 
 ## Modelo de datos
 
-| Tabla               | Descripción                                                                                                                                                                     |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `users`             | Cuentas: email, hash de la contraseña, rol y estado `active`                                                                                                                    |
-| `doctors`           | Perfil del médico (1:1 con `users`): nombre, especialidad y cédula profesional única                                                                                            |
-| `services`          | Servicios que ofrece la clínica, con su duración en minutos                                                                                                                     |
-| `doctor_services`   | Relación muchos a muchos: qué servicios ofrece cada médico                                                                                                                      |
-| `schedule_blocks`   | Horario semanal: día (1 = lunes … 7 = domingo) e inicio/fin en minutos desde la medianoche, hora de la clínica                                                                  |
-| `patients`          | Perfil del paciente: nombre, fecha de nacimiento, teléfono (E.164) y consentimiento de WhatsApp. La cuenta de usuario es opcional                                               |
-| `time_off`          | Días libres y ausencias de cada médico (fecha y hora exactas de inicio y fin)                                                                                                   |
-| `appointments`      | Citas: paciente, médico, servicio, inicio y fin (UTC), estado (`scheduled`, `confirmed`, `cancelled`, `completed`, `no_show`) y datos de cancelación. Nunca se borran           |
-| `medical_histories` | Antecedentes de cada paciente (1:1): tipo de sangre, alergias, enfermedades crónicas, medicamentos, antecedentes quirúrgicos y familiares, y quién los actualizó por última vez |
-| `clinical_notes`    | Notas SOAP, opcionalmente ligadas a una cita (una nota por cita). Las enmiendas son filas nuevas que apuntan a la nota original. Solo se agregan filas                          |
-| `audit_logs`        | Quién consultó o modificó qué expediente y cuándo, incluidos los intentos denegados. Solo metadatos. Solo se agregan filas                                                      |
-| `conversations`     | Una conversación por paciente con la clínica: estado (`open`, `closed`), hora del último mensaje y cuándo la leyó cada lado por última vez                                      |
-| `messages`          | Mensajes del chat: conversación, remitente, rol del remitente (`patient` o `employee`) y texto (1–2000 caracteres). Solo se agregan filas                                       |
-| `attachments`       | Archivos del expediente: nombre original, tipo, tamaño, hash SHA-256, clave de almacenamiento, categoría, quién lo subió, revisó y anuló. Nunca se borran                       |
+| Tabla                   | Descripción                                                                                                                                                                                     |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `users`                 | Cuentas: email, hash de la contraseña, rol y estado `active`                                                                                                                                    |
+| `doctors`               | Perfil del médico (1:1 con `users`): nombre, especialidad y cédula profesional única                                                                                                            |
+| `services`              | Servicios que ofrece la clínica, con su duración en minutos                                                                                                                                     |
+| `doctor_services`       | Relación muchos a muchos: qué servicios ofrece cada médico                                                                                                                                      |
+| `schedule_blocks`       | Horario semanal: día (1 = lunes … 7 = domingo) e inicio/fin en minutos desde la medianoche, hora de la clínica                                                                                  |
+| `patients`              | Perfil del paciente: nombre, fecha de nacimiento, teléfono (E.164), correo de contacto opcional y consentimiento para recordatorios por WhatsApp y por correo. La cuenta de usuario es opcional |
+| `time_off`              | Días libres y ausencias de cada médico (fecha y hora exactas de inicio y fin)                                                                                                                   |
+| `appointments`          | Citas: paciente, médico, servicio, inicio y fin (UTC), estado (`scheduled`, `confirmed`, `cancelled`, `completed`, `no_show`) y datos de cancelación. Nunca se borran                           |
+| `medical_histories`     | Antecedentes de cada paciente (1:1): tipo de sangre, alergias, enfermedades crónicas, medicamentos, antecedentes quirúrgicos y familiares, y quién los actualizó por última vez                 |
+| `clinical_notes`        | Notas SOAP, opcionalmente ligadas a una cita (una nota por cita). Las enmiendas son filas nuevas que apuntan a la nota original. Solo se agregan filas                                          |
+| `audit_logs`            | Quién consultó o modificó qué expediente y cuándo, incluidos los intentos denegados. Solo metadatos. Solo se agregan filas                                                                      |
+| `conversations`         | Una conversación por paciente con la clínica: estado (`open`, `closed`), hora del último mensaje y cuándo la leyó cada lado por última vez                                                      |
+| `messages`              | Mensajes del chat: conversación, remitente, rol del remitente (`patient` o `employee`) y texto (1–2000 caracteres). Solo se agregan filas                                                       |
+| `attachments`           | Archivos del expediente: nombre original, tipo, tamaño, hash SHA-256, clave de almacenamiento, categoría, quién lo subió, revisó y anuló. Nunca se borran                                       |
+| `appointment_reminders` | Recordatorios por enviar (outbox): cita, hora, estado (`pending`, `sent`, `failed`, `cancelled`, `skipped`), canal, intentos y último error. Uno por cita                                       |
 
 Además de la validación en la API, la base de datos aplica sus propias reglas con restricciones `CHECK` (duración de los servicios, días y horas válidos, rangos de días libres, tipos de sangre y reglas de las enmiendas). En `clinical_notes`, `audit_logs` y `messages` **solo se agregan filas**: un trigger rechaza cualquier `UPDATE` o `DELETE`, así que ni un bug ni una consulta manual pueden alterar una nota, la bitácora o un mensaje. En `attachments` un trigger solo permite llenar, una vez, los datos de revisión y de anulación.
 
@@ -379,9 +401,12 @@ src/
 │   ├── rooms.ts           # salas user:<id> y staff
 │   ├── socket-server.ts   # servidor de Socket.IO, autenticación con cookie, expiración de la sesión
 │   └── socket.types.ts    # eventos tipados entre servidor y clientes
+├── scripts/
+│   └── send-test-reminder.ts  # envía un recordatorio de ejemplo (npm run mail:test)
 ├── shared/
 │   ├── errors/            # clases de error propias
 │   ├── events.ts          # EventEmitter tipado para eventos de dominio (p. ej. se guardó un mensaje)
+│   ├── mail/              # interfaz MailTransport y SMTP con Nodemailer
 │   ├── middlewares/       # manejadores de 404 y de errores
 │   ├── schemas/           # schemas de Zod compartidos (ids, nombres, paginación, ayudas para PATCH)
 │   ├── storage/           # interfaz FileStorage y su implementación en disco local
@@ -467,6 +492,15 @@ src/
     │   ├── patients.schema.ts       # normalización del teléfono y fechas
     │   ├── patients.service.ts      # reglas de acceso (personal o el propio paciente)
     │   └── patients.types.ts
+    ├── reminders/
+    │   ├── channels/
+    │   │   ├── email.channel.ts            # el ReminderChannel de correo
+    │   │   └── reminder-email.template.ts  # recordatorio en español, texto y HTML
+    │   ├── reminder-schedule.ts   # cuándo enviar y cuándo reintentar (funciones puras)
+    │   ├── reminder.types.ts      # interfaz ReminderChannel, destinatario y contenido
+    │   ├── reminders.constants.ts
+    │   ├── reminders.repository.ts # programar, cancelar, tomar con FOR UPDATE SKIP LOCKED
+    │   └── reminders.worker.ts    # envía cada minuto los recordatorios pendientes, con reintentos
     ├── schedules/
     │   ├── schedules.controller.ts
     │   ├── schedules.repository.ts
@@ -499,7 +533,7 @@ Cada módulo agrupa su schema de validación, tipos, acceso a datos, controlador
 6. ~~Pruebas automáticas (Vitest), integración continua y cobertura de código (SonarQube)~~ ✅
 7. ~~Expedientes clínicos y auditoría~~ ✅
 8. ~~Chat en tiempo real~~ ✅
-9. Recordatorios por WhatsApp
+9. ~~Recordatorios de citas (correo)~~ ✅ — canal de WhatsApp pendiente
 10. ~~Archivos adjuntos~~ ✅
 11. Documentación, seguridad y despliegue
 
