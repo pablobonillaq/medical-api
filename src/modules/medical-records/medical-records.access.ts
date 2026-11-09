@@ -7,7 +7,9 @@ import { medicalRecordsRepository } from './medical-records.repository.js'
 
 export type DoctorAccess = { kind: 'doctor'; patientId: string; doctorId: string }
 export type PatientAccess = { kind: 'patient'; patientId: string }
-export type RecordAccess = DoctorAccess | PatientAccess
+// Front desk: only for attachments, and never to open clinical content
+export type FrontDeskAccess = { kind: 'employee'; patientId: string }
+export type RecordAccess = DoctorAccess | PatientAccess | FrontDeskAccess
 
 // Who can open a medical record: the patient themselves or a doctor who treats them.
 // Admins and front desk staff never see clinical content.
@@ -15,6 +17,7 @@ export const authorizeRecordAccess = async (
   patientId: string,
   ctx: AuditContext,
   resource: AuditResource,
+  { allowFrontDesk = false }: { allowFrontDesk?: boolean } = {},
 ): Promise<RecordAccess> => {
   const { actor } = ctx
   const patient = await medicalRecordsRepository.findPatientOwner(patientId)
@@ -22,6 +25,10 @@ export const authorizeRecordAccess = async (
 
   if (actor.role === 'patient' && patient.userId === actor.id) {
     return { kind: 'patient', patientId }
+  }
+
+  if (actor.role === 'employee' && allowFrontDesk) {
+    return { kind: 'employee', patientId }
   }
 
   if (actor.role === 'doctor') {
@@ -36,7 +43,7 @@ export const authorizeRecordAccess = async (
   throw new NotFoundError('Patient not found')
 }
 
-// Patients can read their record but only the treating doctor can change it
+// Patients (and the front desk, when allowed) cannot change the record: only the treating doctor
 export const requireTreatingDoctor = async (
   access: RecordAccess,
   ctx: AuditContext,

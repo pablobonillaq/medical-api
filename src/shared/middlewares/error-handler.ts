@@ -7,7 +7,13 @@ export const notFoundHandler: RequestHandler = (req, _res, next) => {
   next(new NotFoundError(`Route ${req.method} ${req.originalUrl} not found`))
 }
 
-export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
+export const errorHandler: ErrorRequestHandler = (err, _req, res, next) => {
+  // The response already started (e.g. a file download failed halfway): Express closes it
+  if (res.headersSent) {
+    next(err)
+    return
+  }
+
   if (err instanceof AppError) {
     res.status(err.statusCode).json({ error: err.message })
     return
