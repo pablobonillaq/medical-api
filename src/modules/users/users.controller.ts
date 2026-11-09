@@ -1,5 +1,5 @@
 import type { RequestHandler } from 'express'
-import { UnauthorizedError } from '../../shared/errors/app-error.js'
+import { getAuthUser } from '../auth/auth.user.js'
 import {
   createStaffSchema,
   listUsersQuerySchema,
@@ -21,10 +21,9 @@ const list: RequestHandler = async (req, res) => {
 }
 
 const update: RequestHandler = async (req, res) => {
-  if (!req.user) throw new UnauthorizedError()
   const { id } = userIdParamsSchema.parse(req.params)
   const input = updateUserSchema.parse(req.body)
-  const user = await usersService.update(req.user.id, id, input)
+  const user = await usersService.update(getAuthUser(req).id, id, input)
   res.json({ user })
 }
 

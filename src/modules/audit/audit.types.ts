@@ -1,7 +1,7 @@
 import type { Request } from 'express'
 import type { AuditAction, AuditResource } from '../../generated/prisma/enums.js'
 import type { Prisma } from '../../generated/prisma/client.js'
-import { UnauthorizedError } from '../../shared/errors/app-error.js'
+import { getAuthUser } from '../auth/auth.user.js'
 import type { PublicUser } from '../users/users.types.js'
 import type { AuditLogWithActor } from './audit.repository.js'
 
@@ -24,9 +24,8 @@ export type AuditEntry = {
 const MAX_USER_AGENT_LENGTH = 500
 
 export const getAuditContext = (req: Request): AuditContext => {
-  if (!req.user) throw new UnauthorizedError()
   return {
-    actor: req.user,
+    actor: getAuthUser(req),
     ip: req.ip ?? null,
     userAgent: req.get('user-agent')?.slice(0, MAX_USER_AGENT_LENGTH) ?? null,
   }

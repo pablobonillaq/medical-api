@@ -1,5 +1,5 @@
-import type { Request, RequestHandler } from 'express'
-import { UnauthorizedError } from '../../shared/errors/app-error.js'
+import type { RequestHandler } from 'express'
+import { getAuthUser } from '../auth/auth.user.js'
 import {
   conversationIdParamsSchema,
   listConversationsQuerySchema,
@@ -9,54 +9,49 @@ import {
 } from './chat.schema.js'
 import { chatService } from './chat.service.js'
 
-const currentUser = (req: Request) => {
-  if (!req.user) throw new UnauthorizedError()
-  return req.user
-}
-
 const list: RequestHandler = async (req, res) => {
   const query = listConversationsQuerySchema.parse(req.query)
   res.json(await chatService.listConversations(query))
 }
 
 const getMine: RequestHandler = async (req, res) => {
-  const conversation = await chatService.getMine(currentUser(req))
+  const conversation = await chatService.getMine(getAuthUser(req))
   res.json({ conversation })
 }
 
 const getById: RequestHandler = async (req, res) => {
   const { conversationId } = conversationIdParamsSchema.parse(req.params)
-  const conversation = await chatService.getById(conversationId, currentUser(req))
+  const conversation = await chatService.getById(conversationId, getAuthUser(req))
   res.json({ conversation })
 }
 
 const listMessages: RequestHandler = async (req, res) => {
   const { conversationId } = conversationIdParamsSchema.parse(req.params)
   const query = listMessagesQuerySchema.parse(req.query)
-  res.json(await chatService.listMessages(conversationId, query, currentUser(req)))
+  res.json(await chatService.listMessages(conversationId, query, getAuthUser(req)))
 }
 
 const sendMine: RequestHandler = async (req, res) => {
   const input = sendMessageSchema.parse(req.body)
-  res.status(201).json(await chatService.sendAsPatient(currentUser(req), input))
+  res.status(201).json(await chatService.sendAsPatient(getAuthUser(req), input))
 }
 
 const send: RequestHandler = async (req, res) => {
   const { conversationId } = conversationIdParamsSchema.parse(req.params)
   const input = sendMessageSchema.parse(req.body)
-  res.status(201).json(await chatService.send(conversationId, currentUser(req), input))
+  res.status(201).json(await chatService.send(conversationId, getAuthUser(req), input))
 }
 
 const markAsRead: RequestHandler = async (req, res) => {
   const { conversationId } = conversationIdParamsSchema.parse(req.params)
-  const conversation = await chatService.markAsRead(conversationId, currentUser(req))
+  const conversation = await chatService.markAsRead(conversationId, getAuthUser(req))
   res.json({ conversation })
 }
 
 const updateStatus: RequestHandler = async (req, res) => {
   const { conversationId } = conversationIdParamsSchema.parse(req.params)
   const input = updateConversationStatusSchema.parse(req.body)
-  const conversation = await chatService.updateStatus(conversationId, input, currentUser(req))
+  const conversation = await chatService.updateStatus(conversationId, input, getAuthUser(req))
   res.json({ conversation })
 }
 

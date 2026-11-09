@@ -1,5 +1,5 @@
 import type { RequestHandler } from 'express'
-import { UnauthorizedError } from '../../shared/errors/app-error.js'
+import { getAuthUser } from '../auth/auth.user.js'
 import { idParamsSchema } from '../../shared/schemas/common.js'
 import {
   createPatientSchema,
@@ -21,23 +21,20 @@ const create: RequestHandler = async (req, res) => {
 }
 
 const getMine: RequestHandler = async (req, res) => {
-  if (!req.user) throw new UnauthorizedError()
-  const patient = await patientsService.getMine(req.user)
+  const patient = await patientsService.getMine(getAuthUser(req))
   res.json({ patient })
 }
 
 const getById: RequestHandler = async (req, res) => {
-  if (!req.user) throw new UnauthorizedError()
   const { id } = idParamsSchema.parse(req.params)
-  const patient = await patientsService.getById(id, req.user)
+  const patient = await patientsService.getById(id, getAuthUser(req))
   res.json({ patient })
 }
 
 const update: RequestHandler = async (req, res) => {
-  if (!req.user) throw new UnauthorizedError()
   const { id } = idParamsSchema.parse(req.params)
   const input = updatePatientSchema.parse(req.body)
-  const patient = await patientsService.update(id, input, req.user)
+  const patient = await patientsService.update(id, input, getAuthUser(req))
   res.json({ patient })
 }
 

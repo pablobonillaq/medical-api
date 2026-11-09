@@ -7,10 +7,11 @@ import {
   updateServiceSchema,
 } from './services.schema.js'
 import { servicesRepository } from './services.repository.js'
+import { getAuthUser } from '../auth/auth.user.js'
 
 const list: RequestHandler = async (req, res) => {
   const query = listServicesQuerySchema.parse(req.query)
-  const includeInactive = query.includeInactive === true && req.user?.role === 'admin'
+  const includeInactive = query.includeInactive === true && getAuthUser(req).role === 'admin'
   const services = await servicesRepository.findMany({ includeInactive })
   res.json({ services })
 }

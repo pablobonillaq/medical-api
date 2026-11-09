@@ -1,19 +1,24 @@
 import { Router } from 'express'
 import { prisma } from '../../db/prisma.js'
 
+// In an object so a test can simulate a database that does not answer
+export const healthChecks = {
+  database: async () => {
+    await prisma.$queryRaw`SELECT 1`
+  },
+}
+
 export const healthRouter = Router()
 
 healthRouter.get('/', async (_req, res) => {
-  let database: 'up' | 'down' = 'up'
-  try {
-    await prisma.$queryRaw`SELECT 1`
-  } catch {
-    database = 'down'
-  }
+  const databaseUp = await healthChecks.database().then(
+    () => true,
+    () => false,
+  )
 
-  res.status(database === 'up' ? 200 : 503).json({
-    status: database === 'up' ? 'ok' : 'error',
-    database,
+  res.status(databaseUp ? 200 : 503).json({
+    status: databaseUp ? 'ok' : 'error',
+    database: databaseUp ? 'up' : 'down',
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
   })

@@ -46,16 +46,18 @@ const envSchema = z.object({
   REMINDERS_ENABLED: z.stringbool().default(true),
 })
 
-const result = envSchema
-  .refine((vars) => (vars.SMTP_USER === undefined) === (vars.SMTP_PASSWORD === undefined), {
-    error: 'Set both SMTP_USER and SMTP_PASSWORD, or neither',
-    path: ['SMTP_PASSWORD'],
-  })
-  .safeParse(process.env)
-
-if (!result.success) {
-  console.error('Invalid environment variables:\n' + z.prettifyError(result.error))
-  process.exit(1)
+// Throws with every problem listed. At startup that stops the API before it serves anything.
+export const parseEnv = (vars: NodeJS.ProcessEnv) => {
+  const result = envSchema
+    .refine((data) => (data.SMTP_USER === undefined) === (data.SMTP_PASSWORD === undefined), {
+      error: 'Set both SMTP_USER and SMTP_PASSWORD, or neither',
+      path: ['SMTP_PASSWORD'],
+    })
+    .safeParse(vars)
+  if (!result.success) {
+    throw new Error('Invalid environment variables:\n' + z.prettifyError(result.error))
+  }
+  return result.data
 }
 
-export const env = result.data
+export const env = parseEnv(process.env)

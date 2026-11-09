@@ -14,7 +14,7 @@ import { chatRouter } from './modules/chat/chat.routes.js'
 import { fileURLToPath } from 'node:url'
 import { env } from './config/env.js'
 
-export const createApp = () => {
+export const createApp = ({ serveDemoPages = env.NODE_ENV !== 'production' } = {}) => {
   const app = express()
 
   app.disable('x-powered-by')
@@ -30,11 +30,10 @@ export const createApp = () => {
   app.use('/availability', availabilityRouter)
   app.use('/appointments', appointmentsRouter)
   app.use('/audit-logs', auditLogsRouter)
-  app.use('/audit-logs', auditLogsRouter)
   app.use('/conversations', chatRouter)
 
   // Demo pages for manual testing (public/), never served in production
-  if (env.NODE_ENV !== 'production') {
+  if (serveDemoPages) {
     app.use('/demo', express.static(fileURLToPath(new URL('../public', import.meta.url))))
   }
 

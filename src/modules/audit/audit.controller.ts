@@ -1,5 +1,5 @@
 import type { RequestHandler } from 'express'
-import { UnauthorizedError } from '../../shared/errors/app-error.js'
+import { getAuthUser } from '../auth/auth.user.js'
 import { accessLogQuerySchema, listAuditLogsQuerySchema } from './audit.schema.js'
 import { auditService } from './audit.service.js'
 
@@ -10,9 +10,8 @@ const list: RequestHandler = async (req, res) => {
 }
 
 const myAccessLog: RequestHandler = async (req, res) => {
-  if (!req.user) throw new UnauthorizedError()
   const query = accessLogQuerySchema.parse(req.query)
-  const result = await auditService.listMyAccessLog(req.user, query)
+  const result = await auditService.listMyAccessLog(getAuthUser(req), query)
   res.json(result)
 }
 

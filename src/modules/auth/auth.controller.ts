@@ -1,6 +1,6 @@
 import type { CookieOptions, RequestHandler } from 'express'
 import { env } from '../../config/env.js'
-import { UnauthorizedError } from '../../shared/errors/app-error.js'
+import { getAuthUser } from './auth.user.js'
 import { registerPatientSchema } from '../patients/patients.schema.js'
 import { loginSchema } from '../users/users.schema.js'
 import { ACCESS_TOKEN_COOKIE, TOKEN_TTL_MS } from './auth.constants.js'
@@ -30,8 +30,7 @@ const logout: RequestHandler = (_req, res) => {
 }
 
 const me: RequestHandler = (req, res) => {
-  if (!req.user) throw new UnauthorizedError()
-  res.json({ user: req.user })
+  res.json({ user: getAuthUser(req) })
 }
 
 export const authController = { register, login, logout, me }
