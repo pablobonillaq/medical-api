@@ -8,7 +8,7 @@
 
 API REST para la gestión de una clínica con varios médicos: agenda de citas, expedientes clínicos, chat entre pacientes y clínica, y recordatorios de citas por correo (WhatsApp más adelante).
 
-> **Estado:** en desarrollo. Fases 1–10 completadas (configuración base, base de datos, autenticación y roles, catálogos, citas, pruebas e integración continua, expediente clínico y auditoría, chat en tiempo real, recordatorios de citas por correo, archivos adjuntos); siguen la documentación, la seguridad y el despliegue. WhatsApp se agregará después como un segundo canal de recordatorios.
+> **Estado:** en desarrollo. Fases 1–10 completadas (configuración base, base de datos, autenticación y roles, catálogos, citas, pruebas e integración continua, expediente clínico y auditoría, chat en tiempo real, recordatorios de citas por correo, archivos adjuntos). Fase 11 en curso: la documentación con OpenAPI está lista; siguen la seguridad y el despliegue. WhatsApp se agregará después como un segundo canal de recordatorios.
 > Proyecto de portafolio. Todos los datos de pruebas son **ficticios**.
 
 ## Funcionalidades
@@ -22,7 +22,7 @@ API REST para la gestión de una clínica con varios médicos: agenda de citas, 
 - [x] Chat en tiempo real entre pacientes y clínica
 - [x] Recordatorios de citas por correo, enviados por un proceso en segundo plano (canal de WhatsApp pendiente)
 - [x] Archivos adjuntos (estudios de laboratorio, imágenes)
-- [ ] Documentación con OpenAPI / Swagger
+- [x] Documentación con OpenAPI y Swagger UI (no se sirve en producción)
 
 ## Roles
 
@@ -47,6 +47,7 @@ API REST para la gestión de una clínica con varios médicos: agenda de citas, 
 - **Tiempo real:** Socket.IO
 - **Subida de archivos:** Multer (en memoria), guardados en disco detrás de una interfaz de almacenamiento
 - **Correo:** Nodemailer (SMTP), con Mailpit atrapando todos los correos en desarrollo
+- **Documentación de la API:** OpenAPI 3.1 generado desde los esquemas de Zod (zod-openapi) y Swagger UI
 - **Por agregar:** WhatsApp Cloud API
 
 ## Requisitos
@@ -69,6 +70,8 @@ npm run dev
 ```
 
 Comprueba que todo funciona en `GET http://localhost:3000/health`.
+
+La documentación interactiva de la API está en `http://localhost:3000/docs`, y el documento OpenAPI en `/openapi.json`. Inicia sesión con `POST /auth/login` desde esa página y las demás peticiones usan la misma sesión. Ninguno de los dos se sirve en producción.
 
 Para probar el chat, abre `http://localhost:3000/demo/chat.html` en dos ventanas del navegador (una privada): inicia sesión como paciente en una y como empleado de recepción en la otra. La página de prueba no se sirve en producción.
 
@@ -150,6 +153,8 @@ npm run test:coverage  # reporte en coverage/index.html
 En cada push a `master` y en cada pull request, [GitHub Actions](.github/workflows/ci.yml) levanta un servicio de PostgreSQL 18 y ejecuta la verificación de tipos, ESLint, la revisión de Prettier y todas las pruebas con cobertura. Después envía el reporte de cobertura a **SonarQube Cloud**, que evalúa el Quality Gate (bugs, vulnerabilidades, code smells, duplicación y cobertura del código nuevo).
 
 ## Endpoints
+
+La referencia completa, con cada campo y sus reglas, está en Swagger UI en `/docs` (ver [Instalación](#instalación)).
 
 Acceso: **Público** (sin sesión), **Autenticado** (cualquier usuario con sesión), **Admin** (solo `admin`).
 
@@ -396,6 +401,10 @@ src/
 ├── db/
 │   ├── prisma.ts          # instancia del cliente de Prisma
 │   └── seed.ts            # crea la primera cuenta de admin
+├── docs/
+│   ├── docs.routes.ts     # Swagger UI en /docs y /openapi.json (no se sirve en producción)
+│   ├── openapi.helpers.ts # respuesta Error común y helper para cuerpos de petición
+│   └── openapi.ts         # arma el documento OpenAPI 3.1 con los *.docs.ts de cada módulo
 ├── generated/             # cliente de Prisma generado (no se sube a git)
 ├── realtime/
 │   ├── chat-broadcast.ts  # eventos de dominio → salas de Socket.IO (igual para REST y sockets)
@@ -423,6 +432,7 @@ src/
     ├── appointments/
     │   ├── appointments.constants.ts  # estados activos, reglas de reserva, STATUS_TRANSITIONS
     │   ├── appointments.controller.ts
+    │   ├── appointments.docs.ts
     │   ├── appointments.errors.ts     # detecta el error de doble agendado de PostgreSQL
     │   ├── appointments.repository.ts
     │   ├── appointments.routes.ts
@@ -430,12 +440,14 @@ src/
     │   ├── appointments.service.ts    # agendar, listas según el rol, cancelar, reprogramar, máquina de estados
     │   ├── appointments.types.ts      # respuesta con fecha y hora locales
     │   ├── availability.controller.ts
+    │   ├── availability.docs.ts
     │   ├── availability.routes.ts
     │   ├── availability.service.ts    # carga horario, días libres y citas en paralelo
     │   └── availability.ts            # computeSlots: función pura, sin acceso a la base de datos
     ├── attachments/
     │   ├── attachments.constants.ts  # tipos permitidos y límite de 10 MB
     │   ├── attachments.controller.ts # cabeceras de descarga y envío por streaming
+    │   ├── attachments.docs.ts
     │   ├── attachments.repository.ts # actualizaciones condicionales para revisar y anular
     │   ├── attachments.routes.ts     # montado bajo /patients/:patientId/attachments
     │   ├── attachments.schema.ts
@@ -448,6 +460,7 @@ src/
     │   └── uploaded-file.ts          # revisa un archivo antes de guardarlo
     ├── audit/
     │   ├── audit.controller.ts
+    │   ├── audit.docs.ts
     │   ├── audit.repository.ts
     │   ├── audit.routes.ts        # GET /audit-logs (admin)
     │   ├── audit.schema.ts        # filtros: paciente, usuario, acción, recurso, fechas
@@ -456,12 +469,14 @@ src/
     ├── auth/
     │   ├── auth.constants.ts
     │   ├── auth.controller.ts
+    │   ├── auth.docs.ts
     │   ├── auth.middleware.ts   # authenticate (sesión) y requireRole (permisos)
     │   ├── auth.routes.ts
     │   └── auth.service.ts      # reglas de negocio (hash, JWT)
     ├── chat/
     │   ├── chat.constants.ts
     │   ├── chat.controller.ts
+    │   ├── chat.docs.ts
     │   ├── chat.repository.ts   # bandeja, paginación por cursor, no leídos (una sola consulta SQL)
     │   ├── chat.routes.ts
     │   ├── chat.schema.ts       # datos de REST y de Socket.IO
@@ -469,12 +484,14 @@ src/
     │   └── chat.types.ts
     ├── doctors/
     │   ├── doctors.controller.ts
+    │   ├── doctors.docs.ts
     │   ├── doctors.repository.ts  # consultas, escrituras anidadas y transacciones
     │   ├── doctors.routes.ts
     │   ├── doctors.schema.ts
     │   ├── doctors.service.ts     # reglas de negocio (email y cédula únicos)
     │   └── doctors.types.ts       # formato de la respuesta
     ├── health/
+    │   ├── health.docs.ts
     │   └── health.routes.ts
     ├── medical-records/
     │   ├── clinical-notes.controller.ts
@@ -483,12 +500,14 @@ src/
     │   ├── medical-history.service.ts    # PUT reemplaza los antecedentes; audita los campos que cambian
     │   ├── medical-records.access.ts     # quién puede abrir un expediente (paciente o médico tratante)
     │   ├── medical-records.constants.ts
+    │   ├── medical-records.docs.ts
     │   ├── medical-records.repository.ts
     │   ├── medical-records.routes.ts     # montado bajo /patients/:patientId
     │   ├── medical-records.schema.ts
     │   └── medical-records.types.ts
     ├── patients/
     │   ├── patients.controller.ts
+    │   ├── patients.docs.ts
     │   ├── patients.repository.ts   # búsqueda y paginación
     │   ├── patients.routes.ts
     │   ├── patients.schema.ts       # normalización del teléfono y fechas
@@ -505,17 +524,20 @@ src/
     │   └── reminders.worker.ts    # envía cada minuto los recordatorios pendientes, con reintentos
     ├── schedules/
     │   ├── schedules.controller.ts
+    │   ├── schedules.docs.ts
     │   ├── schedules.repository.ts
     │   ├── schedules.routes.ts      # montado en /doctors/:doctorId
     │   ├── schedules.schema.ts      # validación de HH:mm y de traslapes
     │   └── schedules.service.ts     # permisos: admin o el propio médico
     ├── services/
     │   ├── services.controller.ts
+    │   ├── services.docs.ts
     │   ├── services.repository.ts
     │   ├── services.routes.ts
     │   └── services.schema.ts
     └── users/
         ├── users.controller.ts
+        ├── users.docs.ts
         ├── users.repository.ts  # acceso a la base de datos con Prisma
         ├── users.routes.ts
         ├── users.schema.ts
@@ -523,7 +545,7 @@ src/
         └── users.types.ts
 ```
 
-Cada módulo agrupa su schema de validación, tipos, acceso a datos, controlador y rutas.
+Cada módulo agrupa su schema de validación, tipos, acceso a datos, controlador, rutas y rutas de OpenAPI (`*.docs.ts`).
 
 ## Plan de desarrollo
 
@@ -537,7 +559,7 @@ Cada módulo agrupa su schema de validación, tipos, acceso a datos, controlador
 8. ~~Chat en tiempo real~~ ✅
 9. ~~Recordatorios de citas (correo)~~ ✅ — canal de WhatsApp pendiente
 10. ~~Archivos adjuntos~~ ✅
-11. Documentación, seguridad y despliegue
+11. Documentación, seguridad y despliegue — documentación con OpenAPI ✅
 
 ## Privacidad de datos
 

@@ -44,6 +44,10 @@ GET {{baseUrl}}/health
 # Ruta inexistente → 404
 GET {{baseUrl}}/does-not-exist
 
+### OpenAPI document → 200 (outside production; Swagger UI is at /docs in the browser)
+# Documento OpenAPI → 200 (fuera de producción; Swagger UI está en /docs en el navegador)
+GET {{baseUrl}}/openapi.json
+
 
 # =============================================================================
 # Auth / Autenticación

@@ -6,6 +6,13 @@ import { healthPaths } from '../modules/health/health.docs.js'
 import { schedulesPaths } from '../modules/schedules/schedules.docs.js'
 import { servicesPaths } from '../modules/services/services.docs.js'
 import { usersPaths } from '../modules/users/users.docs.js'
+import { appointmentsPaths } from '../modules/appointments/appointments.docs.js'
+import { availabilityPaths } from '../modules/appointments/availability.docs.js'
+import { attachmentsPaths } from '../modules/attachments/attachments.docs.js'
+import { auditPaths } from '../modules/audit/audit.docs.js'
+import { chatPaths } from '../modules/chat/chat.docs.js'
+import { medicalRecordsPaths } from '../modules/medical-records/medical-records.docs.js'
+import { patientsPaths } from '../modules/patients/patients.docs.js'
 
 const paths: ZodOpenApiPathsObject = {
   ...healthPaths,
@@ -14,6 +21,13 @@ const paths: ZodOpenApiPathsObject = {
   ...servicesPaths,
   ...doctorsPaths,
   ...schedulesPaths,
+  ...patientsPaths,
+  ...availabilityPaths,
+  ...appointmentsPaths,
+  ...medicalRecordsPaths,
+  ...attachmentsPaths,
+  ...auditPaths,
+  ...chatPaths,
 }
 
 const description = `
@@ -40,6 +54,20 @@ export const buildOpenApiDocument = () =>
       { name: 'Services', description: 'What the clinic offers' },
       { name: 'Doctors', description: 'Doctor profiles and the services they offer' },
       { name: 'Schedules', description: 'Weekly hours and time off of each doctor' },
+      { name: 'Patients', description: 'Patient profiles' },
+      { name: 'Availability', description: 'Free times to book' },
+      { name: 'Appointments', description: 'Booking, changes and attendance' },
+      {
+        name: 'Medical records',
+        description: 'Medical history and clinical notes. Every access is audited.',
+      },
+      { name: 'Attachments', description: 'Files of the medical record' },
+      { name: 'Audit log', description: 'Who accessed each medical record' },
+      {
+        name: 'Chat',
+        description:
+          'Patients and front desk. Real-time events use Socket.IO on the same server (see the README).',
+      },
     ],
     // Every operation needs the session cookie unless it says otherwise
     security: [{ sessionCookie: [] }],
