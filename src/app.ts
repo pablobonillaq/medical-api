@@ -13,8 +13,11 @@ import { auditLogsRouter } from './modules/audit/audit.routes.js'
 import { chatRouter } from './modules/chat/chat.routes.js'
 import { fileURLToPath } from 'node:url'
 import { env } from './config/env.js'
+import { createDocsRouter } from './docs/docs.routes.js'
 
-export const createApp = ({ serveDemoPages = env.NODE_ENV !== 'production' } = {}) => {
+const isProduction = env.NODE_ENV === 'production'
+
+export const createApp = ({ serveDemoPages = !isProduction, serveDocs = !isProduction } = {}) => {
   const app = express()
 
   app.disable('x-powered-by')
@@ -37,6 +40,8 @@ export const createApp = ({ serveDemoPages = env.NODE_ENV !== 'production' } = {
     app.use('/demo', express.static(fileURLToPath(new URL('../public', import.meta.url))))
   }
 
+  // API documentation (Swagger UI), never served in production
+  if (serveDocs) app.use(createDocsRouter())
   app.use(notFoundHandler)
   app.use(errorHandler)
 
