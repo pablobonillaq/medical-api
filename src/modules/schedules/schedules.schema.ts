@@ -29,21 +29,15 @@ export const replaceScheduleSchema = z.object({
     .max(50, { error: 'A schedule can have at most 50 blocks' })
     .superRefine((blocks, ctx) => {
       const sorted = [...blocks].sort((a, b) => a.dayOfWeek - b.dayOfWeek || a.start - b.start)
-      for (let i = 1; i < sorted.length; i++) {
+      sorted.forEach((current, i) => {
         const previous = sorted[i - 1]
-        const current = sorted[i]
-        if (
-          previous &&
-          current &&
-          previous.dayOfWeek === current.dayOfWeek &&
-          current.start < previous.end
-        ) {
+        if (previous?.dayOfWeek === current.dayOfWeek && current.start < previous.end) {
           ctx.addIssue({
             code: 'custom',
             message: `Blocks overlap on day ${current.dayOfWeek}: ${minutesToTime(previous.start)}–${minutesToTime(previous.end)} and ${minutesToTime(current.start)}–${minutesToTime(current.end)}`,
           })
         }
-      }
+      })
     }),
 })
 
