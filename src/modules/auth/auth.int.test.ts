@@ -78,4 +78,13 @@ describe('auth (integration)', () => {
     await agent.post('/auth/logout').expect(204)
     await agent.get('/auth/me').expect(401)
   })
+
+  it('rejects an email that is not registered with the same message (401)', async () => {
+    const response = await request(app)
+      .post('/auth/login')
+      .send({ email: 'nadie@test.com', password: 'whatever-password' })
+      .expect(401)
+
+    expect(response.body).toEqual({ error: 'Invalid email or password' })
+  })
 })
