@@ -1,4 +1,5 @@
-import { afterAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { chatRepository } from './chat.repository.js'
 import { prisma } from '../../db/prisma.js'
 import {
   createPatient,
@@ -148,5 +149,59 @@ describe('chat (integration)', () => {
     await expect(prisma.message.updateMany({ data: { body: 'Otro texto' } })).rejects.toThrow()
     await expect(prisma.message.deleteMany()).rejects.toThrow()
     expect(await prisma.message.count()).toBe(1)
+  })
+
+  it('lets each side open the conversation with its own unread count', async () => {
+    const conversationId = await startConversation()
+    await employee
+      .post(`/conversations/${conversationId}/messages`)
+      .send({ body: 'Buenos días, sí tenemos' })
+      .expect(201)
+
+    const asPatient = await patient.get(`/conversations/${conversationId}`).expect(200)
+    const asClinic = await employee.get(`/conversations/${conversationId}`).expect(200)
+
+    expect(asPatient.body.conversation.unreadCount).toBe(1)
+    expect(asClinic.body.conversation.unreadCount).toBe(0)
+  })
+
+  it('filters the inbox by status', async () => {
+    const conversationId = await startConversation()
+    await employee
+      .patch(`/conversations/${conversationId}/status`)
+      .send({ status: 'closed' })
+      .expect(200)
+
+    const closed = await employee.get('/conversations').query({ status: 'closed' }).expect(200)
+    const open = await employee.get('/conversations').query({ status: 'open' }).expect(200)
+
+    expect(closed.body.total).toBe(1)
+    expect(open.body).toMatchObject({ total: 0, conversations: [] })
+  })
+
+  it('shows 0 unread when the count query returns nothing for a conversation', async () => {
+    await startConversation()
+    vi.spyOn(chatRepository, 'countUnreadByClinic').mockResolvedValue(new Map())
+
+    const inbox = await employee.get('/conversations').expect(200)
+
+    expect(inbox.body.conversations[0].unreadCount).toBe(0)
+  })
+
+  it('marks a conversation that has no messages yet as read', async () => {
+    const other = await createPatient()
+    const conversation = await prisma.conversation.create({ data: { patientId: other.id } })
+
+    const response = await employee.post(`/conversations/${conversation.id}/read`).expect(200)
+
+    expect(response.body.conversation.unreadCount).toBe(0)
+    const saved = await prisma.conversation.findUniqueOrThrow({ where: { id: conversation.id } })
+    expect(saved.clinicLastReadAt).not.toBeNull()
+  })
+
+  it('returns 404 for a patient account without a profile', async () => {
+    const agent = await loginAs((await createUser('patient')).email)
+
+    await agent.get('/conversations/me').expect(404)
   })
 })

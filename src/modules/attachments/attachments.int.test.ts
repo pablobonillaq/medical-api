@@ -13,6 +13,7 @@ import {
   type TestAgent,
 } from '../../test/helpers.js'
 import { attachmentsRepository } from './attachments.repository.js'
+import { auditService } from '../audit/audit.service.js'
 
 // Small files whose first bytes are real PDF and PNG signatures (fictitious content)
 const PDF = Buffer.from('%PDF-1.4\n% Resultado de laboratorio ficticio\n%%EOF\n')
@@ -230,5 +231,72 @@ describe('attachments (integration)', () => {
       }),
     ).rejects.toThrow()
     expect(await prisma.attachment.count()).toBe(1)
+  })
+
+  it('saves an optional description, and treats a blank one as none', async () => {
+    const described = await patient
+      .post(url)
+      .field('description', '  Estudio de control  ')
+      .attach('file', PDF, 'control.pdf')
+      .expect(201)
+    const blank = await patient
+      .post(url)
+      .field('description', '   ')
+      .attach('file', PDF, 'otro.pdf')
+      .expect(201)
+
+    expect(described.body.attachment.description).toBe('Estudio de control')
+    expect(blank.body.attachment.description).toBeNull()
+  })
+
+  it('links a doctor upload to a clinical note of the same patient', async () => {
+    const note = await prisma.clinicalNote.create({
+      data: {
+        patientId,
+        doctorId,
+        subjective: 'Dolor lumbar',
+        assessment: 'Lumbalgia mecánica',
+        plan: 'Radiografía de columna',
+      },
+    })
+
+    const response = await doctor
+      .post(url)
+      .field('clinicalNoteId', note.id)
+      .attach('file', PNG, 'rx.png')
+      .expect(201)
+
+    expect(response.body.attachment.clinicalNoteId).toBe(note.id)
+  })
+
+  it('returns 404 for a file that does not exist', async () => {
+    await doctor.get(`${url}/00000000-0000-4000-8000-000000000000/download`).expect(404)
+  })
+
+  it('reports multipart problems as 400', async () => {
+    const wrongField = await patient.post(url).attach('document', PDF, 'a.pdf').expect(400)
+    const twoFiles = await patient
+      .post(url)
+      .attach('file', PDF, 'a.pdf')
+      .attach('file', PNG, 'b.png')
+      .expect(400)
+    const longField = await patient
+      .post(url)
+      .field('description', 'x'.repeat(11 * 1024))
+      .attach('file', PDF, 'a.pdf')
+      .expect(400)
+
+    expect(wrongField.body.error).toBe('Send exactly one file, in the "file" field')
+    expect(twoFiles.body.error).toBe('Send exactly one file, in the "file" field')
+    expect(longField.body.error).toBe('Field value too long')
+    expect(await prisma.attachment.count()).toBe(0)
+  })
+
+  it('does not send the file when its download cannot be audited', async () => {
+    const attachment = await uploadOk(patient)
+    vi.spyOn(auditService, 'record').mockRejectedValue(new Error('audit log unavailable'))
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    await patient.get(`${url}/${attachment.id}/download`).expect(500)
   })
 })

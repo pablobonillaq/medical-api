@@ -119,7 +119,9 @@ export const chatService = {
     const hasMore = rows.length > limit
     // Oldest first, the order a chat window shows them
     const messages = rows.slice(0, limit).reverse()
-    return { messages, nextCursor: hasMore ? (messages[0]?.id ?? null) : null }
+    // The next page starts before the oldest message of this one
+    const [oldest] = messages
+    return { messages, nextCursor: hasMore && oldest ? oldest.id : null }
   },
 
   async sendAsPatient(user: PublicUser, input: SendMessageInput) {

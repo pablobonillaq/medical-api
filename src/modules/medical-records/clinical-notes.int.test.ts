@@ -179,4 +179,34 @@ describe('clinical notes (integration)', () => {
     const stored = await prisma.clinicalNote.findUnique({ where: { id: note.id } })
     expect(stored?.plan).toBe(soap.plan)
   })
+
+  it('stores a blank objective as null', async () => {
+    const response = await doctor
+      .post(url)
+      .send({ ...soap, objective: '   ', appointmentId })
+      .expect(201)
+
+    expect(response.body.note.objective).toBeNull()
+  })
+
+  it('does not accept a note for an appointment the patient missed (400)', async () => {
+    await prisma.appointment.update({ where: { id: appointmentId }, data: { status: 'no_show' } })
+
+    const response = await doctor
+      .post(url)
+      .send({ ...soap, appointmentId })
+      .expect(400)
+
+    expect(response.body.error).toBe('Cannot add a note to a no_show appointment')
+  })
+
+  it('returns 404 for a note that does not exist', async () => {
+    const missing = `${url}/00000000-0000-4000-8000-000000000000`
+
+    await doctor.get(missing).expect(404)
+    await doctor
+      .post(`${missing}/amendments`)
+      .send({ ...soap, reason: 'Corrección de la dosis' })
+      .expect(404)
+  })
 })

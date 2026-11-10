@@ -40,6 +40,5 @@ export const usersService = {
       appEvents.emit('user:access-changed', { userId: id })
     }
     return toPublicUser(updated)
-    return toPublicUser(updated)
   },
 }

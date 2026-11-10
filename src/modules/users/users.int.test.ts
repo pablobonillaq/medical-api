@@ -102,4 +102,12 @@ describe('users (integration)', () => {
 
     await employee.get('/users').expect(403)
   })
+
+  it('accepts an update that changes nothing', async () => {
+    const employee = await createUser('employee')
+
+    const response = await admin.patch(`/users/${employee.id}`).send({ active: true }).expect(200)
+
+    expect(response.body.user).toMatchObject({ id: employee.id, active: true, role: 'employee' })
+  })
 })

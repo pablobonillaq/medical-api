@@ -15,7 +15,7 @@ const upload: RequestHandler = async (req, res) => {
   const { patientId } = patientIdParamsSchema.parse(req.params)
   const file = inspectUpload(req.file)
   // With multipart/form-data, Multer puts the text fields in req.body
-  const fields = uploadFieldsSchema.parse(req.body ?? {})
+  const fields = uploadFieldsSchema.parse(req.body)
   const attachment = await attachmentsService.upload(patientId, file, fields, getAuditContext(req))
   res.status(201).json({ attachment })
 }

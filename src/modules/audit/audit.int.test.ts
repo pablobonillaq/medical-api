@@ -9,6 +9,8 @@ import {
   resetDatabase,
 } from '../../test/helpers.js'
 
+const HOUR = 60 * 60 * 1000
+
 describe('audit log (integration)', () => {
   let patient: Awaited<ReturnType<typeof createPatient>>
   let doctorUserId: string
@@ -78,6 +80,28 @@ describe('audit log (integration)', () => {
         await agent.get('/audit-logs').expect(403)
       },
     )
+
+    it('filters by patient, resource and dates', async () => {
+      const agent = await loginAs((await createUser('admin')).email)
+      const list = (query: Record<string, string>) =>
+        agent.get('/audit-logs').query(query).expect(200)
+      const hourAgo = new Date(Date.now() - HOUR).toISOString()
+      const inAnHour = new Date(Date.now() + HOUR).toISOString()
+
+      const response = await list({
+        patientId: patient.id,
+        resource: 'medical_history',
+        from: hourAgo,
+        to: inAnHour,
+      })
+
+      expect(response.body.total).toBe(3)
+      // The newest entry is the patient's own read: patients have no doctor name
+      expect(response.body.entries[0].actor).toMatchObject({ role: 'patient', name: null })
+      expect((await list({ from: inAnHour })).body.total).toBe(0)
+      expect((await list({ to: hourAgo })).body.total).toBe(0)
+      await agent.get('/audit-logs').query({ from: inAnHour, to: hourAgo }).expect(400)
+    })
   })
 
   describe('GET /patients/me/access-log', () => {
@@ -101,6 +125,12 @@ describe('audit log (integration)', () => {
       const agent = await loginAs(doctorEmail)
 
       await agent.get('/patients/me/access-log').expect(403)
+    })
+
+    it('returns 404 for a patient account without a profile', async () => {
+      const agent = await loginAs((await createUser('patient')).email)
+
+      await agent.get('/patients/me/access-log').expect(404)
     })
   })
 })
