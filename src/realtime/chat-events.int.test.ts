@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { prisma } from '../db/prisma.js'
 import { createPatient, createUser, loginAs, resetDatabase } from '../test/helpers.js'
 import {
@@ -11,6 +11,7 @@ import {
   type ClientSocket,
 } from '../test/socket-helpers.js'
 import type { AppServer } from './socket.types.js'
+import { chatService } from '../modules/chat/chat.service.js'
 
 describe('chat events (integration)', () => {
   let io: AppServer
@@ -162,5 +163,70 @@ describe('chat events (integration)', () => {
     await adminAgent.patch(`/users/${employeeId}`).send({ active: false }).expect(200)
 
     expect(await disconnected).toBe('io server disconnect')
+  })
+
+  it('hides unexpected errors from the client', async () => {
+    const patient = await connectAs(patientEmail)
+    const conversationId = await startConversation(patient)
+    vi.spyOn(chatService, 'markAsRead').mockRejectedValue(new Error('database down'))
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    const response = await patient
+      .timeout(2000)
+      .emitWithAck('conversation:read', { conversationId })
+
+    expect(response).toEqual({ ok: false, error: 'Something went wrong' })
+    expect(error).toHaveBeenCalledWith('Socket event failed', expect.any(Error))
+  })
+
+  it('saves a message sent without a callback', async () => {
+    const patient = await connectAs(patientEmail)
+    const employee = await connectAs(employeeEmail)
+    const delivered = waitForEvent(employee, 'message:new')
+
+    patient.emit('message:send', { body: 'Sin esperar respuesta' })
+
+    expect((await delivered).message.body).toBe('Sin esperar respuesta')
+  })
+
+  it('ignores "typing" with an invalid payload or in a conversation the user cannot see', async () => {
+    const patient = await connectAs(patientEmail)
+    const employee = await connectAs(employeeEmail)
+    const conversationId = await startConversation(patient)
+    const other = await connectAs((await createPatient()).user?.email ?? '')
+    const seenByEmployee = collectEvents(employee, 'typing')
+
+    other.emit('typing', { conversationId })
+    other.emit('typing', { conversationId: 'not-a-uuid' })
+    await sleep(100)
+
+    expect(seenByEmployee).toHaveLength(0)
+  })
+
+  it('works for a patient without an account (only the front desk is notified)', async () => {
+    const walkIn = await prisma.patient.create({
+      data: {
+        firstName: 'Rosa',
+        lastName: 'Ibarra',
+        birthDate: new Date('1958-03-02T00:00:00.000Z'),
+        phone: '+525598765432',
+      },
+    })
+    const { id: conversationId } = await prisma.conversation.create({
+      data: { patientId: walkIn.id },
+    })
+    const employee = await connectAs(employeeEmail)
+    const colleague = await connectAs((await createUser('employee')).email)
+    const typing = waitForEvent(colleague, 'typing')
+    const delivered = waitForEvent(colleague, 'message:new')
+
+    employee.emit('typing', { conversationId })
+    expect(await typing).toEqual({ conversationId, side: 'clinic' })
+
+    const response = await employee
+      .timeout(2000)
+      .emitWithAck('message:send', { conversationId, body: 'Le llamamos mañana' })
+    expect(response.ok).toBe(true)
+    expect((await delivered).message.body).toBe('Le llamamos mañana')
   })
 })

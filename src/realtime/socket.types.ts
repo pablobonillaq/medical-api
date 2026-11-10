@@ -14,9 +14,10 @@ export interface ServerToClientEvents {
 }
 
 // Events clients send to the server. Payloads are unknown until Zod validates them.
+// The callback is optional: a client may emit without waiting for an answer.
 export interface ClientToServerEvents {
-  'message:send': (payload: unknown, ack: Ack<{ message: MessageRecord }>) => void
-  'conversation:read': (payload: unknown, ack: Ack<{ conversation: ConversationResponse }>) => void
+  'message:send': (payload: unknown, ack?: Ack<{ message: MessageRecord }>) => void
+  'conversation:read': (payload: unknown, ack?: Ack<{ conversation: ConversationResponse }>) => void
   typing: (payload: unknown) => void
 }
 

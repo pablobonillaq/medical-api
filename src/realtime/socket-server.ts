@@ -1,5 +1,4 @@
 import type { Server as HttpServer } from 'node:http'
-import jwt from 'jsonwebtoken'
 import { Server } from 'socket.io'
 import { ACCESS_TOKEN_COOKIE } from '../modules/auth/auth.constants.js'
 import { authService } from '../modules/auth/auth.service.js'
@@ -13,26 +12,20 @@ import { registerChatHandlers } from './chat-handlers.js'
 
 const CHAT_ROLES: readonly Role[] = ['patient', 'employee']
 
-// Milliseconds until the JWT expires (it was already verified, so it has an exp claim)
-const msUntilExpiry = (token: string) => {
-  const payload = jwt.decode(token)
-  const exp = typeof payload === 'object' && payload?.exp ? payload.exp : 0
-  return exp * 1000 - Date.now()
-}
-
 // Same session as the REST API: the httpOnly cookie travels with the handshake request
 const authenticateSocket = async (socket: AppSocket) => {
   const token = readCookie(socket.handshake.headers.cookie, ACCESS_TOKEN_COOKIE)
   if (!token) throw new UnauthorizedError()
 
-  const user = await authService.getActiveUser(authService.verifyToken(token))
+  const { userId, expiresAt } = authService.verifyToken(token)
+  const user = await authService.getActiveUser(userId)
   if (!CHAT_ROLES.includes(user.role)) {
     throw new ForbiddenError('The chat is only available to patients and front desk staff')
   }
 
   socket.data.user = user
   // A socket must not outlive its session. unref(): this timer alone does not keep Node.js running.
-  const timer = setTimeout(() => socket.disconnect(true), msUntilExpiry(token)).unref()
+  const timer = setTimeout(() => socket.disconnect(true), expiresAt.getTime() - Date.now()).unref()
   socket.on('disconnect', () => clearTimeout(timer))
 }
 

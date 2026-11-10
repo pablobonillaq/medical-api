@@ -204,4 +204,10 @@ describe('chat (integration)', () => {
 
     await agent.get('/conversations/me').expect(404)
   })
+
+  it('returns null while the patient has not written yet', async () => {
+    const response = await patient.get('/conversations/me').expect(200)
+
+    expect(response.body.conversation).toBeNull()
+  })
 })

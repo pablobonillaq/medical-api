@@ -68,10 +68,15 @@ const sendMessage = async (
   return result
 }
 
+// The count query returns every conversation it was asked about; 0 keeps the response
+// valid if a conversation is ever missing from it
+const unreadIn = (counts: Map<string, number>, conversationId: string) =>
+  counts.get(conversationId) ?? 0
+
 const unreadFor = async (conversation: ConversationWithPatient, side: ChatSide) =>
   side === 'patient'
     ? chatRepository.countUnreadByPatient(conversation)
-    : ((await chatRepository.countUnreadByClinic([conversation.id])).get(conversation.id) ?? 0)
+    : unreadIn(await chatRepository.countUnreadByClinic([conversation.id]), conversation.id)
 
 export const chatService = {
   // Used by the Socket.IO handlers to check access without loading anything else
@@ -89,7 +94,7 @@ export const chatService = {
     })
     const unread = await chatRepository.countUnreadByClinic(conversations.map((c) => c.id))
     return {
-      conversations: conversations.map((c) => toConversationResponse(c, unread.get(c.id) ?? 0)),
+      conversations: conversations.map((c) => toConversationResponse(c, unreadIn(unread, c.id))),
       page,
       pageSize,
       total,

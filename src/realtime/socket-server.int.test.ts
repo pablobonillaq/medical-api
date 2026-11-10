@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { prisma } from '../db/prisma.js'
 import { createPatient, createUser, resetDatabase } from '../test/helpers.js'
 import {
@@ -9,6 +9,7 @@ import {
 } from '../test/socket-helpers.js'
 import { STAFF_ROOM, userRoom } from './rooms.js'
 import type { AppServer } from './socket.types.js'
+import { authService } from '../modules/auth/auth.service.js'
 
 describe('socket server (integration)', () => {
   let io: AppServer
@@ -84,5 +85,15 @@ describe('socket server (integration)', () => {
     await prisma.user.update({ where: { id: employee.id }, data: { active: false } })
 
     await expect(connect(cookie)).rejects.toThrow('Invalid or expired session')
+  })
+
+  it('hides unexpected errors during authentication', async () => {
+    const employee = await createUser('employee')
+    const cookie = await loginCookie(employee.email)
+    vi.spyOn(authService, 'getActiveUser').mockRejectedValue(new Error('database down'))
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    await expect(connect(cookie)).rejects.toThrow('Authentication failed')
+    expect(error).toHaveBeenCalledWith('Socket authentication failed', expect.any(Error))
   })
 })

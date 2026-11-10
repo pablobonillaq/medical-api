@@ -16,9 +16,12 @@ const partsFormatter = (timeZone: string) =>
   })
 
 const getLocalParts = (instant: Date, timeZone: string) => {
-  const parts = partsFormatter(timeZone).formatToParts(instant)
-  const get = (type: Intl.DateTimeFormatPartTypes) =>
-    Number(parts.find((part) => part.type === type)?.value ?? 0)
+  const parts = new Map(
+    partsFormatter(timeZone)
+      .formatToParts(instant)
+      .map(({ type, value }) => [type, value]),
+  )
+  const get = (type: Intl.DateTimeFormatPartTypes) => Number(parts.get(type))
   return {
     year: get('year'),
     month: get('month'),

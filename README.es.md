@@ -128,14 +128,16 @@ Los valores de `POSTGRES_*` deben coincidir con el usuario, la contraseña y la 
 
 Las pruebas usan **Vitest** y están junto al código que prueban:
 
-| Tipo        | Archivos               | Qué cubren                                                                                                                     |
-| ----------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| Unitarias   | `src/**/*.test.ts`     | Lógica pura: utilidades de hora y zona horaria, cálculo de horarios disponibles, schemas de Zod, reglas de estado de las citas |
-| Integración | `src/**/*.int.test.ts` | Peticiones HTTP con **Supertest** contra una base de datos PostgreSQL real                                                     |
+| Tipo        | Archivos               | Qué cubren                                                                                                                                                                              |
+| ----------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unitarias   | `src/**/*.test.ts`     | Lógica pura: utilidades de hora y zona horaria, cálculo de horarios disponibles, schemas de Zod, reglas de estado de las citas, detección del tipo de archivo, conversión de respuestas |
+| Integración | `src/**/*.int.test.ts` | Peticiones HTTP con **Supertest** y clientes de Socket.IO contra una base de datos PostgreSQL real                                                                                      |
 
 Las pruebas de integración necesitan el contenedor de la base de datos encendido (`npm run db:up`). Antes de empezar, Vitest crea una base de datos aparte, `medical_api_test`, y le aplica las migraciones, así que los datos de desarrollo nunca se tocan. Cada prueba empieza con las tablas vacías.
 
-Las pruebas de integración también verifican las reglas de la base de datos directamente; por ejemplo, que dos peticiones que agendan el mismo horario al mismo tiempo terminen con un `201` y un `409`.
+Las pruebas de integración también verifican las reglas de la base de datos directamente; por ejemplo, que dos peticiones que agendan el mismo horario al mismo tiempo terminen con un `201` y un `409`. El worker de recordatorios corre contra la misma base de datos con un transporte de correo en memoria, así que nunca se envía un correo.
+
+La cobertura se mantiene en **100 %** de líneas, ramas, funciones y sentencias: `npm run test:coverage` falla si alguna baja (ver `coverage.thresholds` en `vitest.config.ts`). Las ramas que nunca podían ejecutarse se eliminaron en lugar de excluirlas con comentarios `/* v8 ignore */`.
 
 ```bash
 npm run db:up

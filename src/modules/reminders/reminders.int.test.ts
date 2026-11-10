@@ -1,4 +1,5 @@
-import { afterAll, beforeEach, describe, expect, it } from 'vitest'
+import { setTimeout as sleep } from 'node:timers/promises'
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { prisma } from '../../db/prisma.js'
 import type { MailMessage, MailTransport } from '../../shared/mail/mail-transport.js'
 import {
@@ -7,10 +8,13 @@ import {
   loginAs,
   resetDatabase,
   tomorrow,
+  createUser,
 } from '../../test/helpers.js'
 import { appointmentsRepository } from '../appointments/appointments.repository.js'
 import { createEmailChannel } from './channels/email.channel.js'
 import { createReminderWorker } from './reminders.worker.js'
+import type { ReminderChannel } from './reminder.types.js'
+import { remindersRepository } from './reminders.repository.js'
 
 const HOUR = 60 * 60 * 1000
 const hoursFromNow = (hours: number) => new Date(Date.now() + hours * HOUR)
@@ -239,6 +243,110 @@ describe('appointment reminders (integration)', () => {
       expect(a.sent + b.sent).toBe(5)
       expect(sent).toHaveLength(5)
       expect(await prisma.appointmentReminder.count({ where: { status: 'sent' } })).toBe(5)
+    })
+
+    it('skips a walk-in patient who has no email at all', async () => {
+      const walkIn = await prisma.patient.create({
+        data: {
+          firstName: 'Rosa',
+          lastName: 'Ibarra',
+          birthDate: new Date('1958-03-02T00:00:00.000Z'),
+          phone: '+525598765432',
+          emailRemindersOptIn: true,
+        },
+      })
+      const startsAt = hoursFromNow(72)
+      await appointmentsRepository.create({
+        patientId: walkIn.id,
+        doctorId,
+        serviceId,
+        startsAt,
+        endsAt: new Date(startsAt.getTime() + HOUR / 2),
+        notes: null,
+        createdById: (await createUser('employee')).id,
+      })
+      const { transport, sent } = createFakeTransport()
+
+      const summary = await createWorker(transport, () => hoursFromNow(49)).runOnce()
+
+      expect(summary.skipped).toBe(1)
+      expect(sent).toHaveLength(0)
+    })
+
+    it('saves the error of a channel that fails with something that is not an Error', async () => {
+      const appointment = await book(72)
+      const channel: ReminderChannel = {
+        name: 'email',
+        canReach: () => true,
+        // Some libraries reject with a plain string
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+        send: () => Promise.reject('connection timed out'),
+      }
+
+      await createReminderWorker({ channels: [channel], now: () => hoursFromNow(49) }).runOnce()
+
+      expect(await reminderOf(appointment.id)).toMatchObject({
+        status: 'pending',
+        lastError: 'connection timed out',
+      })
+    })
+
+    it('counts a claimed reminder that no longer exists as cancelled', async () => {
+      await book(72)
+      vi.spyOn(remindersRepository, 'findForSending').mockResolvedValue(null)
+      const { transport, sent } = createFakeTransport()
+
+      const summary = await createWorker(transport, () => hoursFromNow(49)).runOnce()
+
+      expect(summary.cancelled).toBe(1)
+      expect(sent).toHaveLength(0)
+    })
+  })
+
+  describe('worker timer', () => {
+    it('runs on a timer, one pass at a time, and stop() waits for the pass in progress', async () => {
+      // Less than 24 hours away, so the reminder is due right now
+      await book(3)
+      const gate = Promise.withResolvers<void>()
+      const send = vi.fn(async () => {
+        await gate.promise
+        return { providerMessageId: '<slow@test>' }
+      })
+      const channel: ReminderChannel = { name: 'email', canReach: () => true, send }
+      const info = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+      const worker = createReminderWorker({ channels: [channel], intervalMs: 5 })
+
+      worker.start()
+      worker.start() // already running: does nothing
+      // Several ticks go by while the first send is still waiting
+      await sleep(100)
+      gate.resolve()
+      await worker.stop()
+
+      expect(send).toHaveBeenCalledTimes(1)
+      expect(info).toHaveBeenCalledWith('Reminders processed', expect.objectContaining({ sent: 1 }))
+      expect(await prisma.appointmentReminder.count({ where: { status: 'sent' } })).toBe(1)
+    })
+
+    it('logs nothing when there is nothing to send', async () => {
+      const info = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+      const worker = createWorker(createFakeTransport().transport, () => new Date())
+
+      worker.start()
+      await worker.stop()
+
+      expect(info).not.toHaveBeenCalled()
+    })
+
+    it('logs a pass that fails instead of crashing', async () => {
+      vi.spyOn(remindersRepository, 'claimDue').mockRejectedValue(new Error('database down'))
+      const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+      const worker = createWorker(createFakeTransport().transport, () => new Date())
+
+      worker.start()
+      await worker.stop()
+
+      expect(error).toHaveBeenCalledWith('Reminder worker failed', expect.any(Error))
     })
   })
 })

@@ -11,7 +11,7 @@ import type { LoginInput } from '../users/users.schema.js'
 import { toPublicUser } from '../users/users.types.js'
 import { SALT_ROUNDS, TOKEN_TTL } from './auth.constants.js'
 
-const tokenPayloadSchema = z.object({ sub: z.uuid() })
+const tokenPayloadSchema = z.object({ sub: z.uuid(), exp: z.number() })
 
 export const authService = {
   async registerPatient({ email, password, ...profile }: RegisterPatientInput) {
@@ -33,10 +33,11 @@ export const authService = {
     return { user: toPublicUser(user), token }
   },
 
-  verifyToken(token: string): string {
+  // Who the session belongs to and when it ends
+  verifyToken(token: string) {
     try {
-      const payload = tokenPayloadSchema.parse(jwt.verify(token, env.JWT_SECRET))
-      return payload.sub
+      const { sub, exp } = tokenPayloadSchema.parse(jwt.verify(token, env.JWT_SECRET))
+      return { userId: sub, expiresAt: new Date(exp * 1000) }
     } catch {
       throw new UnauthorizedError('Invalid or expired session')
     }

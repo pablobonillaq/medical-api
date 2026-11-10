@@ -128,14 +128,16 @@ The `POSTGRES_*` values must match the user, password and database in `DATABASE_
 
 Tests use **Vitest** and live next to the code they test:
 
-| Type        | Files                  | What they cover                                                                                 |
-| ----------- | ---------------------- | ----------------------------------------------------------------------------------------------- |
-| Unit        | `src/**/*.test.ts`     | Pure logic: time and time zone helpers, slot calculation, Zod schemas, appointment status rules |
-| Integration | `src/**/*.int.test.ts` | HTTP requests with **Supertest** against a real PostgreSQL database                             |
+| Type        | Files                  | What they cover                                                                                                                        |
+| ----------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit        | `src/**/*.test.ts`     | Pure logic: time and time zone helpers, slot calculation, Zod schemas, appointment status rules, file type detection, response mappers |
+| Integration | `src/**/*.int.test.ts` | HTTP requests with **Supertest** and Socket.IO clients against a real PostgreSQL database                                              |
 
 The integration tests need the database container running (`npm run db:up`). Before they start, Vitest creates a separate database, `medical_api_test`, and applies the migrations to it, so your development data is never touched. Every test starts with empty tables.
 
-The integration tests also check the database rules directly, for example that two requests booking the same slot at the same time end with one `201` and one `409`.
+The integration tests also check the database rules directly, for example that two requests booking the same slot at the same time end with one `201` and one `409`. The reminder worker runs against the same database with an in-memory mail transport, so no email is ever sent.
+
+Coverage is kept at **100%** of lines, branches, functions and statements: `npm run test:coverage` fails if any of them drops (see `coverage.thresholds` in `vitest.config.ts`). Branches that could never run were removed instead of being excluded with `/* v8 ignore */` comments.
 
 ```bash
 npm run db:up

@@ -55,4 +55,14 @@ describe('email channel', () => {
       subject: 'Recordatorio: tu cita del martes 10 de noviembre a las 09:30',
     })
   })
+
+  it('refuses to send when the patient has no email address', async () => {
+    const { transport, sent } = createFakeTransport()
+    const channel = createEmailChannel(transport, 'Clínica <no-reply@clinica.test>')
+
+    await expect(channel.send({ ...recipient, email: null }, content)).rejects.toThrow(
+      'The patient has no email address',
+    )
+    expect(sent).toHaveLength(0)
+  })
 })

@@ -57,6 +57,8 @@ export default defineConfig({
         'src/scripts/**',
       ],
       reporter: ['text', 'html', 'lcov'],
+      // The run fails if any line, branch, function or statement is left untested
+      thresholds: { 100: true },
     },
   },
 })

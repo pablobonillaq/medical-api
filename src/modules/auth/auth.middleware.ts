@@ -9,7 +9,7 @@ export const authenticate: RequestHandler = async (req, _res, next) => {
   const token = (req.cookies as Record<string, unknown>)[ACCESS_TOKEN_COOKIE]
   if (typeof token !== 'string') throw new UnauthorizedError()
 
-  const userId = authService.verifyToken(token)
+  const { userId } = authService.verifyToken(token)
   req.user = await authService.getActiveUser(userId)
   next()
 }
