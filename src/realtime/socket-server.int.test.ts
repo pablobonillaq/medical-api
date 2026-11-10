@@ -1,3 +1,4 @@
+import jwt from 'jsonwebtoken'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { prisma } from '../db/prisma.js'
 import { createPatient, createUser, resetDatabase } from '../test/helpers.js'
@@ -10,6 +11,8 @@ import {
 import { STAFF_ROOM, userRoom } from './rooms.js'
 import type { AppServer } from './socket.types.js'
 import { authService } from '../modules/auth/auth.service.js'
+import { env } from '../config/env.js'
+import { ACCESS_TOKEN_COOKIE } from '../modules/auth/auth.constants.js'
 
 describe('socket server (integration)', () => {
   let io: AppServer
@@ -95,5 +98,16 @@ describe('socket server (integration)', () => {
 
     await expect(connect(cookie)).rejects.toThrow('Authentication failed')
     expect(error).toHaveBeenCalledWith('Socket authentication failed', expect.any(Error))
+  })
+
+  it('disconnects the socket when the session expires', async () => {
+    const employee = await createUser('employee')
+    // A session that ends in about 2 seconds instead of 1 hour
+    const token = jwt.sign({}, env.JWT_SECRET, { subject: employee.id, expiresIn: 2 })
+    const socket = await connect(`${ACCESS_TOKEN_COOKIE}=${token}`)
+
+    const reason = await new Promise((resolve) => socket.once('disconnect', resolve))
+
+    expect(reason).toBe('io server disconnect')
   })
 })

@@ -229,4 +229,20 @@ describe('chat events (integration)', () => {
     expect(response.ok).toBe(true)
     expect((await delivered).message.body).toBe('Le llamamos mañana')
   })
+
+  it('logs a broadcast that fails without failing the action', async () => {
+    const patient = await connectAs(patientEmail)
+    const conversationId = await startConversation(patient)
+    vi.spyOn(chatService, 'describe').mockRejectedValue(new Error('database down'))
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    const response = await patient
+      .timeout(2000)
+      .emitWithAck('conversation:read', { conversationId })
+
+    expect(response.ok).toBe(true)
+    await vi.waitFor(() => {
+      expect(error).toHaveBeenCalledWith('Chat broadcast failed', expect.any(Error))
+    })
+  })
 })

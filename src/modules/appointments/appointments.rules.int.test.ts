@@ -146,6 +146,19 @@ describe('appointment rules (integration)', () => {
         .send(bookingFor(first, at(8)))
         .expect(500)
     })
+
+    it('turns a booking that loses the race for a slot into a 409', async () => {
+      // Another booking is saved right after this request checked the availability
+      await insertAppointment({ startsAt: at(8), patient: patientB })
+      vi.spyOn(appointmentsRepository, 'findActiveForDoctorBetween').mockResolvedValue([])
+
+      const response = await asPatientA
+        .post('/appointments')
+        .send(bookingFor(first, at(8)))
+        .expect(409)
+
+      expect(response.body.error).toBe('This time slot was just booked, please choose another one')
+    })
   })
 
   describe('listing', () => {
