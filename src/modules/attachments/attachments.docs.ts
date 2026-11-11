@@ -25,7 +25,7 @@ export const attachmentsPaths: ZodOpenApiPathsObject = {
       description:
         'A doctor who treats the patient, the patient, or the front desk. ' +
         'PDF, JPEG, PNG or WebP up to 10 MB; the type is checked from the content, not the name. ' +
-        'Only doctors can link `clinicalNoteId`.',
+        'Only doctors can link clinicalNoteId. At most 30 uploads per hour per user.',
       requestParams: { path: patientIdParamsSchema },
       requestBody: {
         required: true,
@@ -33,7 +33,7 @@ export const attachmentsPaths: ZodOpenApiPathsObject = {
       },
       responses: {
         201: { description: 'The file record' },
-        ...errors(400, 401, 403, 404, 413, 415),
+        ...errors(400, 401, 403, 404, 413, 415, 429),
       },
     },
     get: {

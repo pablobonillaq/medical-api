@@ -19,6 +19,8 @@ export default defineConfig({
       JWT_SECRET: 'test-secret-that-is-long-enough-for-the-validation',
       CLINIC_TIMEZONE: 'America/Mexico_City',
       UPLOADS_DIR: path.join(tmpdir(), 'medical-api-test-uploads'),
+      // Tests send many requests from the same IP; security.int.test.ts turns them on
+      RATE_LIMIT_ENABLED: 'false',
     },
     // Undo every vi.spyOn() after each test, so tests do not affect each other
     restoreMocks: true,

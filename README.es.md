@@ -8,7 +8,7 @@
 
 API REST para la gestión de una clínica con varios médicos: agenda de citas, expedientes clínicos, chat entre pacientes y clínica, y recordatorios de citas por correo (WhatsApp más adelante).
 
-> **Estado:** en desarrollo. Fases 1–10 completadas (configuración base, base de datos, autenticación y roles, catálogos, citas, pruebas e integración continua, expediente clínico y auditoría, chat en tiempo real, recordatorios de citas por correo, archivos adjuntos). Fase 11 en curso: la documentación con OpenAPI está lista; siguen la seguridad y el despliegue. WhatsApp se agregará después como un segundo canal de recordatorios.
+> **Estado:** en desarrollo. Fases 1–10 completadas (configuración base, base de datos, autenticación y roles, catálogos, citas, pruebas e integración continua, expediente clínico y auditoría, chat en tiempo real, recordatorios de citas por correo, archivos adjuntos). Fase 11 en curso: la documentación con OpenAPI y el refuerzo de seguridad están listos; sigue el despliegue. WhatsApp se agregará después como un segundo canal de recordatorios.
 > Proyecto de portafolio. Todos los datos de pruebas son **ficticios**.
 
 ## Funcionalidades
@@ -47,6 +47,7 @@ API REST para la gestión de una clínica con varios médicos: agenda de citas, 
 - **Tiempo real:** Socket.IO
 - **Subida de archivos:** Multer (en memoria), guardados en disco detrás de una interfaz de almacenamiento
 - **Correo:** Nodemailer (SMTP), con Mailpit atrapando todos los correos en desarrollo
+- **Seguridad:** Helmet (encabezados de seguridad) y express-rate-limit
 - **Documentación de la API:** OpenAPI 3.1 generado desde los esquemas de Zod (zod-openapi) y Swagger UI
 - **Por agregar:** WhatsApp Cloud API
 
@@ -81,27 +82,29 @@ Todos los correos (como los recordatorios de citas) llegan a Mailpit, nunca a bu
 
 ## Variables de entorno
 
-| Variable            | Descripción                                                                                  | Ejemplo                                                                 |
-| ------------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `NODE_ENV`          | Entorno: `development`, `test` o `production`                                                | `development`                                                           |
-| `PORT`              | Puerto en el que corre la API                                                                | `3000`                                                                  |
-| `POSTGRES_USER`     | Usuario de PostgreSQL que crea Docker                                                        | `medical`                                                               |
-| `POSTGRES_PASSWORD` | Contraseña de PostgreSQL que crea Docker                                                     | `medical`                                                               |
-| `POSTGRES_DB`       | Base de datos que crea Docker                                                                | `medical_api`                                                           |
-| `DATABASE_URL`      | Cadena de conexión que usan Prisma y la API                                                  | `postgresql://medical:medical@localhost:5433/medical_api?schema=public` |
-| `JWT_SECRET`        | Clave para firmar los tokens JWT                                                             | una cadena larga y aleatoria                                            |
-| `CLINIC_TIMEZONE`   | Zona horaria de la clínica (IANA). Los horarios usan hora local; las citas se guardan en UTC | `America/Mexico_City`                                                   |
-| `UPLOADS_DIR`       | Carpeta de los archivos subidos (relativa a donde se inicia la API). Nunca se sube a git     | `storage/uploads`                                                       |
-| `CLINIC_NAME`       | Nombre de la clínica en los mensajes a pacientes                                             | `Clínica`                                                               |
-| `SMTP_HOST`         | Servidor SMTP para enviar correos (Mailpit en desarrollo)                                    | `localhost`                                                             |
-| `SMTP_PORT`         | Puerto SMTP                                                                                  | `1025`                                                                  |
-| `SMTP_SECURE`       | Usar TLS desde el inicio de la conexión (normalmente `true` con el puerto 465)               | `false`                                                                 |
-| `SMTP_USER`         | Usuario SMTP (omítelo junto con `SMTP_PASSWORD` si no se necesita)                           |                                                                         |
-| `SMTP_PASSWORD`     | Contraseña SMTP                                                                              |                                                                         |
-| `MAIL_FROM`         | Remitente de los correos                                                                     | `Clínica <no-reply@clinica.test>`                                       |
-| `REMINDERS_ENABLED` | Inicia el proceso que envía los recordatorios                                                | `true`                                                                  |
-| `ADMIN_EMAIL`       | Email de la primera cuenta de admin que crea el seed                                         | `admin@clinica.test`                                                    |
-| `ADMIN_PASSWORD`    | Contraseña de esa cuenta de admin (mínimo 12 caracteres)                                     | una contraseña larga                                                    |
+| Variable             | Descripción                                                                                                  | Ejemplo                                                                 |
+| -------------------- | ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| `NODE_ENV`           | Entorno: `development`, `test` o `production`                                                                | `development`                                                           |
+| `PORT`               | Puerto en el que corre la API                                                                                | `3000`                                                                  |
+| `POSTGRES_USER`      | Usuario de PostgreSQL que crea Docker                                                                        | `medical`                                                               |
+| `POSTGRES_PASSWORD`  | Contraseña de PostgreSQL que crea Docker                                                                     | `medical`                                                               |
+| `POSTGRES_DB`        | Base de datos que crea Docker                                                                                | `medical_api`                                                           |
+| `DATABASE_URL`       | Cadena de conexión que usan Prisma y la API                                                                  | `postgresql://medical:medical@localhost:5433/medical_api?schema=public` |
+| `JWT_SECRET`         | Clave para firmar los tokens JWT                                                                             | una cadena larga y aleatoria                                            |
+| `CLINIC_TIMEZONE`    | Zona horaria de la clínica (IANA). Los horarios usan hora local; las citas se guardan en UTC                 | `America/Mexico_City`                                                   |
+| `UPLOADS_DIR`        | Carpeta de los archivos subidos (relativa a donde se inicia la API). Nunca se sube a git                     | `storage/uploads`                                                       |
+| `CLINIC_NAME`        | Nombre de la clínica en los mensajes a pacientes                                                             | `Clínica`                                                               |
+| `SMTP_HOST`          | Servidor SMTP para enviar correos (Mailpit en desarrollo)                                                    | `localhost`                                                             |
+| `SMTP_PORT`          | Puerto SMTP                                                                                                  | `1025`                                                                  |
+| `SMTP_SECURE`        | Usar TLS desde el inicio de la conexión (normalmente `true` con el puerto 465)                               | `false`                                                                 |
+| `SMTP_USER`          | Usuario SMTP (omítelo junto con `SMTP_PASSWORD` si no se necesita)                                           |                                                                         |
+| `SMTP_PASSWORD`      | Contraseña SMTP                                                                                              |                                                                         |
+| `MAIL_FROM`          | Remitente de los correos                                                                                     | `Clínica <no-reply@clinica.test>`                                       |
+| `REMINDERS_ENABLED`  | Inicia el proceso que envía los recordatorios                                                                | `true`                                                                  |
+| `TRUST_PROXY`        | Cuántos proxies hay delante de la API (0: ninguno). Necesario para leer la IP del cliente detrás de un proxy | `0`                                                                     |
+| `RATE_LIMIT_ENABLED` | Activa o desactiva los límites de peticiones (solo las pruebas los desactivan)                               | `true`                                                                  |
+| `ADMIN_EMAIL`        | Email de la primera cuenta de admin que crea el seed                                                         | `admin@clinica.test`                                                    |
+| `ADMIN_PASSWORD`     | Contraseña de esa cuenta de admin (mínimo 12 caracteres)                                                     | una contraseña larga                                                    |
 
 Los valores de `POSTGRES_*` deben coincidir con el usuario, la contraseña y la base de datos de `DATABASE_URL`. Las variables `ADMIN_*` solo las usa `npm run db:seed`.
 
@@ -392,7 +395,8 @@ prisma/
 ├── schema.prisma          # modelos de la base de datos
 └── migrations/            # historial de migraciones en SQL (incluye restricciones CHECK)
 public/
-└── chat.html              # página para probar el chat en el navegador (no se sirve en producción)
+├── chat.html              # página para probar el chat en el navegador (no se sirve en producción)
+└── chat.js                # su script, en un archivo aparte por la Content-Security-Policy
 src/
 ├── index.ts               # arranca el servidor y maneja el apagado
 ├── app.ts                 # crea y configura la app de Express
@@ -418,7 +422,7 @@ src/
 │   ├── errors/            # clases de error propias
 │   ├── events.ts          # EventEmitter tipado para eventos de dominio (p. ej. se guardó un mensaje)
 │   ├── mail/              # interfaz MailTransport y SMTP con Nodemailer
-│   ├── middlewares/       # manejadores de 404 y de errores
+│   ├── middlewares/       # manejadores de 404 y de errores, límites de peticiones
 │   ├── schemas/           # schemas de Zod compartidos (ids, nombres, paginación, ayudas para PATCH)
 │   ├── storage/           # interfaz FileStorage y su implementación en disco local
 │   └── utils/             # utilidades: omitUndefined, HH:mm ↔ minutos, zona horaria de la clínica ↔ UTC, lectura de cookies
@@ -559,7 +563,25 @@ Cada módulo agrupa su schema de validación, tipos, acceso a datos, controlador
 8. ~~Chat en tiempo real~~ ✅
 9. ~~Recordatorios de citas (correo)~~ ✅ — canal de WhatsApp pendiente
 10. ~~Archivos adjuntos~~ ✅
-11. Documentación, seguridad y despliegue — documentación con OpenAPI ✅
+11. Documentación, seguridad y despliegue — documentación con OpenAPI ✅, seguridad ✅
+
+## Seguridad
+
+- **Sesión:** el JWT viaja en una cookie httpOnly y `SameSite=Strict` (`Secure` en producción): los scripts de la página no pueden leerla y otros sitios no pueden enviarla.
+- **Encabezados:** Helmet agrega una Content-Security-Policy (scripts solo del propio origen de la API), `X-Content-Type-Options: nosniff`, HSTS y protección contra clickjacking. Por eso la página demo carga su script desde `chat.js` en lugar de un `<script>` dentro del HTML.
+- **Límites de peticiones:** al pasar el límite, la API responde `429` con los encabezados estándar `RateLimit` y `RateLimit-Policy`, que indican cuándo volver a intentar.
+
+| Qué                                    | Límite             | Se cuenta por |
+| -------------------------------------- | ------------------ | ------------- |
+| Todas las peticiones (excepto /health) | 300 por minuto     | IP            |
+| Inicios de sesión fallidos             | 10 cada 15 minutos | IP            |
+| Registros de pacientes                 | 5 por hora         | IP            |
+| Subidas de archivos                    | 30 por hora        | usuario       |
+
+Los contadores viven en memoria; con más de una instancia de la API necesitarían un almacenamiento compartido (por ejemplo, Redis).
+
+- **Detrás de un proxy:** pon en `TRUST_PROXY` cuántos proxies hay delante de la API (balanceador, Nginx). Si no, todos los clientes compartirían la IP del proxy en los límites y en el registro de auditoría.
+- **CORS:** no está habilitado. El frontend web se sirve desde el mismo origen que la API, y a las apps móviles no les aplica CORS.
 
 ## Privacidad de datos
 

@@ -3,7 +3,7 @@ import { defineConfig } from 'eslint/config'
 import tseslint from 'typescript-eslint'
 
 export default defineConfig(
-  { ignores: ['dist', 'coverage', 'src/generated'] },
+  { ignores: ['dist', 'coverage', 'src/generated', 'public'] },
   eslint.configs.recommended,
   tseslint.configs.recommendedTypeChecked,
   {

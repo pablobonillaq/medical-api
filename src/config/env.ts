@@ -44,6 +44,11 @@ const envSchema = z.object({
   MAIL_FROM: z.string().min(3).default('Clínica <no-reply@clinica.test>'),
   // Turns off the background worker that sends reminders (e.g. in a second API instance)
   REMINDERS_ENABLED: z.stringbool().default(true),
+  // How many proxies (load balancer, Nginx) are in front of the API. 0: clients reach it directly.
+  // Decides which IP is the client's, for the rate limits and the audit log.
+  TRUST_PROXY: z.coerce.number().int().min(0).default(0),
+  // Limits requests per IP and per user. Only the test runs turn it off (vitest.config.ts).
+  RATE_LIMIT_ENABLED: z.stringbool().default(true),
 })
 
 // Throws with every problem listed. At startup that stops the API before it serves anything.

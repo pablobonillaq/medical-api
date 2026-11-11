@@ -10,12 +10,13 @@ export const authPaths: ZodOpenApiPathsObject = {
       summary: 'Create a patient account',
       description:
         'Creates the account and the patient profile in one request. ' +
-        'The phone is saved in E.164 format (+52 and 10 digits). Staff accounts are created from /users.',
+        'The phone is saved in E.164 format (+52 and 10 digits). Staff accounts are created from /users.' +
+        'At most 5 sign-ups per hour from the same IP.',
       security: [],
       requestBody: jsonBody(registerPatientSchema),
       responses: {
         201: { description: 'The new patient profile' },
-        ...errors(400, 409),
+        ...errors(400, 409, 429),
       },
     },
   },
@@ -25,13 +26,15 @@ export const authPaths: ZodOpenApiPathsObject = {
       summary: 'Sign in',
       description:
         'Saves the session in an httpOnly cookie that lasts 1 hour. ' +
-        'Wrong email and wrong password get the same 401 message.',
+        'Wrong email and wrong password get the same 401 message.' +
+        'After 10 failed attempts in 15 minutes, the IP gets 429.',
       security: [],
       requestBody: jsonBody(loginSchema),
       responses: {
         200: { description: 'The signed-in user. The response sets the session cookie.' },
         ...errors(400, 401),
         403: { description: 'The account is disabled' },
+        ...errors(429),
       },
     },
   },

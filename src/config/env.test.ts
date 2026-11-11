@@ -15,6 +15,8 @@ describe('parseEnv', () => {
       SMTP_PORT: 1025,
       SMTP_SECURE: false,
       REMINDERS_ENABLED: true,
+      TRUST_PROXY: 0,
+      RATE_LIMIT_ENABLED: true,
     })
   })
 

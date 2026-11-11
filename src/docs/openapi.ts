@@ -40,6 +40,8 @@ browser sends it with every other request made from this page.
 
 The request bodies and parameters shown here come from the same Zod schemas that
 validate the requests, so they never fall behind the code.
+
+Every client can make up to 300 requests per minute (429 after that; \`/health\` is not counted).
 `
 
 // Built from the Zod schemas: the same rules that validate each request

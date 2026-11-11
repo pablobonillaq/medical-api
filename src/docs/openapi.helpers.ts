@@ -23,6 +23,7 @@ const ERROR_DESCRIPTIONS = {
   409: 'Conflicts with the current data',
   413: 'The file is too large',
   415: 'The file type is not allowed',
+  429: 'Too many requests: wait for the time in the RateLimit header',
 } as const
 
 type ErrorStatus = keyof typeof ERROR_DESCRIPTIONS
