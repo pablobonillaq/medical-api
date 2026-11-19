@@ -158,14 +158,23 @@ describe('clinical notes (integration)', () => {
     expect(read?.details).toEqual({ noteIds: [second.body.note.id, first.id] })
   })
 
-  it('lets patients read their notes but not write them', async () => {
-    await createNote()
+  it('does not let patients read or write their notes, and audits each attempt', async () => {
+    const note = await createNote()
     const agent = await loginAs(patient.user?.email ?? '')
 
-    const response = await agent.get(url).expect(200)
+    await agent.get(url).expect(403)
+    await agent.get(`${url}/${note.id}`).expect(403)
     await agent.post(url).send(soap).expect(403)
 
-    expect(response.body.notes).toHaveLength(1)
+    const denied = await prisma.auditLog.findMany({
+      where: { action: 'denied', resource: 'clinical_note' },
+      orderBy: { createdAt: 'asc' },
+    })
+    expect(denied.map((entry) => entry.details)).toEqual([
+      { reason: 'doctors_only' },
+      { reason: 'doctors_only' },
+      { reason: 'read_only' },
+    ])
   })
 
   it('never lets a note be changed or deleted, not even directly in the database', async () => {

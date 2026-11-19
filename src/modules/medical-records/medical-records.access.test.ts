@@ -107,4 +107,21 @@ describe('requireTreatingDoctor', () => {
       details: { reason: 'read_only' },
     })
   })
+
+  it('stops the patient from reading the clinical notes, with its own reason', async () => {
+    const access = { kind: 'patient', patientId: PATIENT_ID } as const
+
+    await expect(
+      requireTreatingDoctor(access, ownerCtx, 'clinical_note', 'doctors_only'),
+    ).rejects.toMatchObject({
+      statusCode: 403,
+      message: 'Only the treating doctor can read clinical notes',
+    })
+    expect(recordAudit).toHaveBeenCalledWith(ownerCtx, {
+      action: 'denied',
+      resource: 'clinical_note',
+      patientId: PATIENT_ID,
+      details: { reason: 'doctors_only' },
+    })
+  })
 })

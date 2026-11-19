@@ -52,9 +52,20 @@ const assertValidAppointment = async (appointmentId: string, access: DoctorAcces
 const noteIds = (notes: ClinicalNoteWithAmendments[]) =>
   notes.flatMap((note) => [note.id, ...note.amendments.map((amendment) => amendment.id)])
 
+// The notes are for the treating doctor only, not for the patient they are about
+const readableNotes = async (patientId: string, ctx: AuditContext) =>
+  requireTreatingDoctor(
+    await authorizeRecordAccess(patientId, ctx, RESOURCE),
+    ctx,
+    RESOURCE,
+    'doctors_only',
+  )
+
 export const clinicalNotesService = {
+  // Only the treating doctor reads the notes: the patient gets 403 (doctors_only), and anyone
+  // else 404 from authorizeRecordAccess. Both attempts end up in the audit log
   async list(patientId: string, { page, pageSize }: ListNotesQuery, ctx: AuditContext) {
-    await authorizeRecordAccess(patientId, ctx, RESOURCE)
+    await readableNotes(patientId, ctx)
 
     const [notes, total] = await medicalRecordsRepository.findNotes(
       patientId,
@@ -70,7 +81,7 @@ export const clinicalNotesService = {
   },
 
   async getById(patientId: string, noteId: string, ctx: AuditContext) {
-    await authorizeRecordAccess(patientId, ctx, RESOURCE)
+    await readableNotes(patientId, ctx)
 
     const note = await medicalRecordsRepository.findNote(patientId, noteId)
     if (!note) throw new NotFoundError('Clinical note not found')

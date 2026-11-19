@@ -286,13 +286,14 @@ There are no endpoints: reminders follow the appointments.
 | ------ | ----------------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET`  | `/patients/:patientId/medical-history`          | Treating doctor or the patient | Returns the medical history (`null` if there is none yet)                                                                                                                                         |
 | `PUT`  | `/patients/:patientId/medical-history`          | Treating doctor                | Creates or replaces the whole history: `bloodType`, `allergies`, `chronicConditions`, `currentMedications`, `surgicalHistory`, `familyHistory`. Missing or empty fields are saved as `null`       |
-| `GET`  | `/patients/:patientId/notes`                    | Treating doctor or the patient | Paginated original notes, newest first, each one with its amendments                                                                                                                              |
-| `GET`  | `/patients/:patientId/notes/:noteId`            | Treating doctor or the patient | Returns a note with its amendments                                                                                                                                                                |
+| `GET`  | `/patients/:patientId/notes`                    | Treating doctor                | Paginated original notes, newest first, each one with its amendments                                                                                                                              |
+| `GET`  | `/patients/:patientId/notes/:noteId`            | Treating doctor                | Returns a note with its amendments                                                                                                                                                                |
 | `POST` | `/patients/:patientId/notes`                    | Treating doctor                | Creates a SOAP note (`subjective`, `objective`, `assessment`, `plan`), optionally linked to one of the doctor's appointments with the patient (`appointmentId`). One note per appointment (`409`) |
 | `POST` | `/patients/:patientId/notes/:noteId/amendments` | Author of the note             | Corrects a note: the full corrected note plus a `reason`. The original never changes                                                                                                              |
 
 - A **treating doctor** has at least one appointment with the patient that was not cancelled. Admins and employees never see clinical content.
-- Anyone else gets `404`, so the API does not reveal which patients exist. A patient who tries to change their record gets `403`.
+- Anyone else gets `404`, so the API does not reveal which patients exist. A patient who tries to change their record, or to read the clinical notes, gets `403`.
+- **Clinical notes are for the treating doctor only.** The patient sees their medical history and their files, but not the notes the doctor writes about them.
 - Notes cannot be edited or deleted. Amendments always point to the original note, and only its author can add them.
 - Every read, change and denied attempt is saved in the audit log. A change and its audit entry are saved in the same transaction.
 

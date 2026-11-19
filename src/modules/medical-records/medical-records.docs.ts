@@ -13,6 +13,10 @@ const WHO_CAN_READ =
   'The patient, or a doctor who treats them (an appointment that was not cancelled). ' +
   'Anyone else gets 404, and the attempt is recorded in the audit log.'
 
+const WHO_CAN_READ_NOTES =
+  'Only a doctor who treats the patient (an appointment that was not cancelled). The patient ' +
+  'gets 403 and anyone else 404; every attempt is recorded in the audit log.'
+
 export const medicalRecordsPaths: ZodOpenApiPathsObject = {
   '/patients/{patientId}/medical-history': {
     get: {
@@ -43,11 +47,11 @@ export const medicalRecordsPaths: ZodOpenApiPathsObject = {
     get: {
       tags: ['Medical records'],
       summary: 'List clinical notes',
-      description: `${WHO_CAN_READ} Original notes, newest first, each with its amendments.`,
+      description: `${WHO_CAN_READ_NOTES} Original notes, newest first, each with its amendments.`,
       requestParams: { path: patientIdParamsSchema, query: listNotesQuerySchema },
       responses: {
         200: { description: 'One page of notes' },
-        ...errors(400, 401, 404),
+        ...errors(400, 401, 403, 404),
       },
     },
     post: {
@@ -68,11 +72,11 @@ export const medicalRecordsPaths: ZodOpenApiPathsObject = {
     get: {
       tags: ['Medical records'],
       summary: 'Get a clinical note',
-      description: WHO_CAN_READ,
+      description: WHO_CAN_READ_NOTES,
       requestParams: { path: noteParamsSchema },
       responses: {
         200: { description: 'The note with its amendments' },
-        ...errors(400, 401, 404),
+        ...errors(400, 401, 403, 404),
       },
     },
   },

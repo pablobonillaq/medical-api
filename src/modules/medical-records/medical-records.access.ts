@@ -43,11 +43,22 @@ export const authorizeRecordAccess = async (
   throw new NotFoundError('Patient not found')
 }
 
-// Patients (and the front desk, when allowed) cannot change the record: only the treating doctor
+// Why someone who may open the record is still stopped: read_only, they tried to change it;
+// doctors_only, a patient tried to read the clinical notes, which only the treating doctor sees
+export type DoctorOnlyReason = 'read_only' | 'doctors_only'
+
+const DOCTOR_ONLY_MESSAGES: Record<DoctorOnlyReason, string> = {
+  read_only: 'Only the treating doctor can change the medical record',
+  doctors_only: 'Only the treating doctor can read clinical notes',
+}
+
+// Patients (and the front desk, when allowed) cannot change the record, and patients cannot
+// read the clinical notes: only the treating doctor can. The denied attempt is recorded
 export const requireTreatingDoctor = async (
   access: RecordAccess,
   ctx: AuditContext,
   resource: AuditResource,
+  reason: DoctorOnlyReason = 'read_only',
 ): Promise<DoctorAccess> => {
   if (access.kind === 'doctor') return access
 
@@ -55,7 +66,7 @@ export const requireTreatingDoctor = async (
     action: 'denied',
     resource,
     patientId: access.patientId,
-    details: { reason: 'read_only' },
+    details: { reason },
   })
-  throw new ForbiddenError('Only the treating doctor can change the medical record')
+  throw new ForbiddenError(DOCTOR_ONLY_MESSAGES[reason])
 }

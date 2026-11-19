@@ -1166,8 +1166,8 @@ Content-Type: application/json
 
 { "allergies": "Ninguna" }
 
-### Patient reads their notes → 200
-# La paciente consulta sus notas → 200
+### Patient cannot read the clinical notes → 403 (recorded as denied)
+# La paciente no puede leer las notas clínicas → 403 (se registra como denied)
 GET {{baseUrl}}/patients/{{registerPatient.response.body.$.patient.id}}/notes
 
 ### Who opened my record → 200 (doctors, employee and denied attempts; not my own visits)
