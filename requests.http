@@ -386,6 +386,29 @@ GET {{baseUrl}}/doctors?serviceId={{createService.response.body.$.service.id}}
 # Ver un médico → 200
 GET {{baseUrl}}/doctors/{{createDoctor.response.body.$.doctor.id}}
 
+### Visitor without a session sees the active services → 200 (the cookie is not sent)
+# Un visitante sin sesión ve los servicios activos → 200 (no se envía la cookie)
+# @no-cookie-jar
+GET {{baseUrl}}/services
+
+### Visitor sees the doctors' public profile, without email or user id → 200
+# El visitante ve el perfil público de los médicos, sin email ni id de usuario → 200
+# @no-cookie-jar
+GET {{baseUrl}}/doctors/{{createDoctor.response.body.$.doctor.id}}
+
+### Visitor tries to see a doctor's schedule → 401
+# El visitante intenta ver el horario de un médico → 401
+# @no-cookie-jar
+GET {{baseUrl}}/doctors/{{createDoctor.response.body.$.doctor.id}}/schedule
+
+### Visitor tries to create a service → 401
+# El visitante intenta crear un servicio → 401
+# @no-cookie-jar
+POST {{baseUrl}}/services
+Content-Type: application/json
+
+{ "name": "Sin sesión", "durationMinutes": 30 }
+
 ### Update the doctor's profile → 200
 # Actualizar el perfil del médico → 200
 PATCH {{baseUrl}}/doctors/{{createDoctor.response.body.$.doctor.id}}

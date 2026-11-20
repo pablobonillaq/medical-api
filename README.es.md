@@ -181,22 +181,24 @@ Acceso: **Público** (sin sesión), **Autenticado** (cualquier usuario con sesi�
 
 ### Servicios
 
-| Método  | Ruta            | Acceso      | Descripción                                                                                 |
-| ------- | --------------- | ----------- | ------------------------------------------------------------------------------------------- |
-| `GET`   | `/services`     | Autenticado | Lista los servicios activos; el admin puede agregar `?includeInactive=true`                 |
-| `GET`   | `/services/:id` | Autenticado | Devuelve un servicio                                                                        |
-| `POST`  | `/services`     | Admin       | Crea un servicio (duración entre 5 y 480 minutos, múltiplo de 5; `409` si el nombre existe) |
-| `PATCH` | `/services/:id` | Admin       | Actualiza un servicio. Los servicios se desactivan (`active: false`), nunca se borran       |
+| Método  | Ruta            | Acceso  | Descripción                                                                                 |
+| ------- | --------------- | ------- | ------------------------------------------------------------------------------------------- |
+| `GET`   | `/services`     | Público | Lista los servicios activos; el admin puede agregar `?includeInactive=true`                 |
+| `GET`   | `/services/:id` | Público | Devuelve un servicio (los servicios inactivos solo los ve el admin)                         |
+| `POST`  | `/services`     | Admin   | Crea un servicio (duración entre 5 y 480 minutos, múltiplo de 5; `409` si el nombre existe) |
+| `PATCH` | `/services/:id` | Admin   | Actualiza un servicio. Los servicios se desactivan (`active: false`), nunca se borran       |
 
 ### Médicos
 
-| Método  | Ruta                    | Acceso      | Descripción                                                                                                         |
-| ------- | ----------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------- |
-| `GET`   | `/doctors`              | Autenticado | Lista los médicos activos con sus servicios; filtro `?serviceId=` y, para el admin, `?includeInactive=true`         |
-| `GET`   | `/doctors/:id`          | Autenticado | Devuelve un médico (los médicos inactivos solo los ve el admin)                                                     |
-| `POST`  | `/doctors`              | Admin       | Crea la cuenta de usuario y el perfil del médico en una sola transacción (`409` si el email o la cédula ya existen) |
-| `PATCH` | `/doctors/:id`          | Admin       | Actualiza el perfil del médico (nombre, especialidad, cédula)                                                       |
-| `PUT`   | `/doctors/:id/services` | Admin       | Reemplaza la lista de servicios que ofrece el médico (`{ "serviceIds": [...] }`)                                    |
+| Método  | Ruta                    | Acceso  | Descripción                                                                                                         |
+| ------- | ----------------------- | ------- | ------------------------------------------------------------------------------------------------------------------- |
+| `GET`   | `/doctors`              | Público | Lista los médicos activos con sus servicios; filtro `?serviceId=` y, para el admin, `?includeInactive=true`         |
+| `GET`   | `/doctors/:id`          | Público | Devuelve un médico (los médicos inactivos solo los ve el admin)                                                     |
+| `POST`  | `/doctors`              | Admin   | Crea la cuenta de usuario y el perfil del médico en una sola transacción (`409` si el email o la cédula ya existen) |
+| `PATCH` | `/doctors/:id`          | Admin   | Actualiza el perfil del médico (nombre, especialidad, cédula)                                                       |
+| `PUT`   | `/doctors/:id/services` | Admin   | Reemplaza la lista de servicios que ofrece el médico (`{ "serviceIds": [...] }`)                                    |
+
+Los servicios y médicos de la clínica son públicos, para que el sitio web los muestre a cualquier persona. Sin sesión, y para los pacientes, un médico llega como perfil público: nombre, especialidad, cédula profesional (pública en México) y los servicios activos, sin el id de usuario, el email ni el estado de la cuenta. El personal recibe el registro completo. Una petición que sí envía la cookie de sesión necesita una sesión válida (`401` si no).
 
 Para activar o desactivar a un médico se usa `PATCH /users/:userId` con `{ "active": false }`.
 
@@ -582,6 +584,7 @@ Cada módulo agrupa su schema de validación, tipos, acceso a datos, controlador
 Los contadores viven en memoria; con más de una instancia de la API necesitarían un almacenamiento compartido (por ejemplo, Redis).
 
 - **Detrás de un proxy:** pon en `TRUST_PROXY` cuántos proxies hay delante de la API (balanceador, Nginx). Si no, todos los clientes compartirían la IP del proxy en los límites y en el registro de auditoría.
+- **Catálogo público:** solo `GET /services` y `GET /doctors` (y sus `/:id`) funcionan sin sesión, y a los visitantes no les devuelven datos de la cuenta. Todo lo demás, incluidos los horarios de los médicos, necesita sesión.
 - **CORS:** no está habilitado. El frontend web se sirve desde el mismo origen que la API, y a las apps móviles no les aplica CORS.
 
 ## Privacidad de datos

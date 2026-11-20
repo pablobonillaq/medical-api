@@ -45,3 +45,7 @@ export const jsonBody = (schema: z.ZodType): ZodOpenApiRequestBodyObject => ({
   required: true,
   content: { 'application/json': { schema } },
 })
+
+// For operations anyone can call: without the session cookie ({}) or with it, which changes
+// what they return. Public operations that ignore the session use security: [] instead
+export const optionalSession = [{}, { sessionCookie: [] }]

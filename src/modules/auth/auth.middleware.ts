@@ -20,3 +20,15 @@ export const requireRole =
     if (!roles.includes(getAuthUser(req).role)) throw new ForbiddenError()
     next()
   }
+
+// For routes anyone can see, like the clinic's services and doctors. Without the cookie the
+// request goes on as a visitor (no req.user); with it, the session must be valid, as in
+// authenticate, so an expired or forged token is never treated as a visitor by mistake
+export const optionalAuthenticate: RequestHandler = async (req, res, next) => {
+  const token = (req.cookies as Record<string, unknown>)[ACCESS_TOKEN_COOKIE]
+  if (token === undefined) {
+    next()
+    return
+  }
+  await authenticate(req, res, next)
+}

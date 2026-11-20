@@ -7,11 +7,10 @@ import {
   updateServiceSchema,
 } from './services.schema.js'
 import { servicesRepository } from './services.repository.js'
-import { getAuthUser } from '../auth/auth.user.js'
 
 const list: RequestHandler = async (req, res) => {
   const query = listServicesQuerySchema.parse(req.query)
-  const includeInactive = query.includeInactive === true && getAuthUser(req).role === 'admin'
+  const includeInactive = query.includeInactive === true && req.user?.role === 'admin'
   const services = await servicesRepository.findMany({ includeInactive })
   res.json({ services })
 }
@@ -19,7 +18,10 @@ const list: RequestHandler = async (req, res) => {
 const getById: RequestHandler = async (req, res) => {
   const { id } = idParamsSchema.parse(req.params)
   const service = await servicesRepository.findById(id)
-  if (!service) throw new NotFoundError('Service not found')
+  // An inactive service is no longer offered: only the admin, who can enable it again, sees it
+  if (!service || (!service.active && req.user?.role !== 'admin')) {
+    throw new NotFoundError('Service not found')
+  }
   res.json({ service })
 }
 

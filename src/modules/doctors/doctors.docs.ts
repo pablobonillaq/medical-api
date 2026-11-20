@@ -1,5 +1,5 @@
 import type { ZodOpenApiPathsObject } from 'zod-openapi'
-import { errors, jsonBody } from '../../docs/openapi.helpers.js'
+import { errors, jsonBody, optionalSession } from '../../docs/openapi.helpers.js'
 import { idParamsSchema } from '../../shared/schemas/common.js'
 import {
   createDoctorSchema,
@@ -14,8 +14,11 @@ export const doctorsPaths: ZodOpenApiPathsObject = {
       tags: ['Doctors'],
       summary: 'List doctors',
       description:
+        'Public: no session needed. Visitors and patients get the public profile (no user id, ' +
+        'email or status, and only active services); staff get the whole record. ' +
         '`serviceId` keeps the doctors who offer that service. ' +
         '`includeInactive=true` also lists disabled doctors (admins only).',
+      security: optionalSession,
       requestParams: { query: listDoctorsQuerySchema },
       responses: {
         200: { description: 'The doctors with their services' },
@@ -37,6 +40,10 @@ export const doctorsPaths: ZodOpenApiPathsObject = {
     get: {
       tags: ['Doctors'],
       summary: 'Get a doctor',
+      description:
+        'Public: no session needed. Visitors and patients get the public profile; staff get ' +
+        'the whole record. Disabled doctors are only visible to admins.',
+      security: optionalSession,
       requestParams: { path: idParamsSchema },
       responses: {
         200: { description: 'The doctor with their services' },

@@ -1,5 +1,4 @@
 import type { RequestHandler } from 'express'
-import { getAuthUser } from '../auth/auth.user.js'
 import { idParamsSchema } from '../../shared/schemas/common.js'
 import {
   createDoctorSchema,
@@ -11,13 +10,13 @@ import { doctorsService } from './doctors.service.js'
 
 const list: RequestHandler = async (req, res) => {
   const query = listDoctorsQuerySchema.parse(req.query)
-  const doctors = await doctorsService.list(query, getAuthUser(req).role)
+  const doctors = await doctorsService.list(query, req.user?.role)
   res.json({ doctors })
 }
 
 const getById: RequestHandler = async (req, res) => {
   const { id } = idParamsSchema.parse(req.params)
-  const doctor = await doctorsService.getById(id, getAuthUser(req).role)
+  const doctor = await doctorsService.getById(id, req.user?.role)
   res.json({ doctor })
 }
 

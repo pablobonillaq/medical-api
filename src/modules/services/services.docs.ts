@@ -1,5 +1,5 @@
 import type { ZodOpenApiPathsObject } from 'zod-openapi'
-import { errors, jsonBody } from '../../docs/openapi.helpers.js'
+import { errors, jsonBody, optionalSession } from '../../docs/openapi.helpers.js'
 import { idParamsSchema } from '../../shared/schemas/common.js'
 import {
   createServiceSchema,
@@ -12,7 +12,10 @@ export const servicesPaths: ZodOpenApiPathsObject = {
     get: {
       tags: ['Services'],
       summary: 'List services',
-      description: '`includeInactive=true` also lists inactive services (admins only).',
+      description:
+        'Public: no session needed. `includeInactive=true` also lists inactive services ' +
+        '(admins only).',
+      security: optionalSession,
       requestParams: { query: listServicesQuerySchema },
       responses: {
         200: { description: 'The services' },
@@ -34,6 +37,8 @@ export const servicesPaths: ZodOpenApiPathsObject = {
     get: {
       tags: ['Services'],
       summary: 'Get a service',
+      description: 'Public: no session needed. Inactive services are only visible to admins.',
+      security: optionalSession,
       requestParams: { path: idParamsSchema },
       responses: {
         200: { description: 'The service' },

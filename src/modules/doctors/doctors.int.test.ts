@@ -1,3 +1,4 @@
+import request from 'supertest'
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { prisma } from '../../db/prisma.js'
 import {
@@ -6,6 +7,8 @@ import {
   loginAs,
   resetDatabase,
   TEST_PASSWORD,
+  app,
+  createPatient,
   type TestAgent,
 } from '../../test/helpers.js'
 
@@ -137,5 +140,62 @@ describe('doctors (integration)', () => {
       .post('/doctors')
       .send({ ...newDoctor, licenseNumber: 'ABC123' })
       .expect(400)
+  })
+
+  it('shows visitors and patients the public profile, without account data', async () => {
+    const { doctor, service } = await createDoctorWithService()
+    // A service the doctor offered, but the clinic no longer does
+    const retired = await prisma.service.create({
+      data: { name: 'Retirado', durationMinutes: 30, active: false },
+    })
+    await prisma.doctorService.create({ data: { doctorId: doctor.id, serviceId: retired.id } })
+    const { user } = await createPatient()
+    const patient = await loginAs(user?.email ?? '')
+
+    const publicProfile = {
+      id: doctor.id,
+      firstName: 'Ana',
+      lastName: 'Garay',
+      specialty: 'Medicina general',
+      licenseNumber: doctor.licenseNumber,
+      services: [{ id: service.id, name: service.name, durationMinutes: 30 }],
+    }
+    const list = await request(app).get('/doctors').expect(200)
+    const one = await request(app).get(`/doctors/${doctor.id}`).expect(200)
+    const forPatient = await patient.get(`/doctors/${doctor.id}`).expect(200)
+
+    expect(list.body.doctors).toEqual([publicProfile])
+    expect(one.body.doctor).toEqual(publicProfile)
+    expect(forPatient.body.doctor).toEqual(publicProfile)
+  })
+
+  it('gives the staff the whole record', async () => {
+    const { doctor } = await createDoctorWithService()
+
+    const response = await employee.get(`/doctors/${doctor.id}`).expect(200)
+
+    expect(response.body.doctor).toMatchObject({
+      userId: doctor.userId,
+      email: doctor.user.email,
+      active: true,
+    })
+  })
+
+  it('hides disabled doctors from visitors (404)', async () => {
+    const { doctor } = await createDoctorWithService()
+    await prisma.user.update({ where: { id: doctor.userId }, data: { active: false } })
+
+    const list = await request(app).get('/doctors').query({ includeInactive: true }).expect(200)
+    await request(app).get(`/doctors/${doctor.id}`).expect(404)
+
+    expect(list.body.doctors).toHaveLength(0)
+  })
+
+  it('still needs a session to manage doctors and see schedules (401)', async () => {
+    const { doctor } = await createDoctorWithService()
+
+    await request(app).post('/doctors').send(newDoctor).expect(401)
+    await request(app).patch(`/doctors/${doctor.id}`).send({ specialty: 'Otra' }).expect(401)
+    await request(app).get(`/doctors/${doctor.id}/schedule`).expect(401)
   })
 })

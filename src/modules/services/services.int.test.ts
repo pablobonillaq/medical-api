@@ -1,6 +1,8 @@
+import request from 'supertest'
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { prisma } from '../../db/prisma.js'
-import { createUser, loginAs, resetDatabase, type TestAgent } from '../../test/helpers.js'
+import { app, createUser, loginAs, resetDatabase, type TestAgent } from '../../test/helpers.js'
+import { ACCESS_TOKEN_COOKIE } from '../auth/auth.constants.js'
 
 describe('services (integration)', () => {
   let admin: TestAgent
@@ -99,5 +101,41 @@ describe('services (integration)', () => {
 
     await employee.post('/services').send({ name: 'Otra', durationMinutes: 30 }).expect(403)
     await employee.patch(`/services/${service.id}`).send({ active: false }).expect(403)
+  })
+
+  it('shows the active services to anyone, without a session', async () => {
+    const service = await createService()
+    const inactive = await createService('Ultrasonido', 45)
+    await admin.patch(`/services/${inactive.id}`).send({ active: false }).expect(200)
+
+    // includeInactive is ignored: only the admin can ask for inactive services
+    const list = await request(app).get('/services').query({ includeInactive: true }).expect(200)
+    const one = await request(app).get(`/services/${service.id}`).expect(200)
+
+    expect(list.body.services).toEqual([expect.objectContaining({ name: 'Consulta general' })])
+    expect(one.body.service.name).toBe('Consulta general')
+  })
+
+  it('hides an inactive service from everyone but the admin (404)', async () => {
+    const service = await createService()
+    await admin.patch(`/services/${service.id}`).send({ active: false }).expect(200)
+
+    await request(app).get(`/services/${service.id}`).expect(404)
+    await employee.get(`/services/${service.id}`).expect(404)
+    await admin.get(`/services/${service.id}`).expect(200)
+  })
+
+  it('still needs a session to create or change services (401)', async () => {
+    const service = await createService()
+
+    await request(app).post('/services').send({ name: 'Otra', durationMinutes: 30 }).expect(401)
+    await request(app).patch(`/services/${service.id}`).send({ active: false }).expect(401)
+  })
+
+  it('rejects an invalid session instead of treating it as a visitor (401)', async () => {
+    await request(app)
+      .get('/services')
+      .set('Cookie', `${ACCESS_TOKEN_COOKIE}=not-a-token`)
+      .expect(401)
   })
 })

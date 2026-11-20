@@ -181,22 +181,24 @@ Access: **Public** (no session), **Authenticated** (any logged-in user), **Admin
 
 ### Services
 
-| Method  | Path            | Access        | Description                                                                                     |
-| ------- | --------------- | ------------- | ----------------------------------------------------------------------------------------------- |
-| `GET`   | `/services`     | Authenticated | Lists active services; admins can add `?includeInactive=true`                                   |
-| `GET`   | `/services/:id` | Authenticated | Returns a service                                                                               |
-| `POST`  | `/services`     | Admin         | Creates a service (duration between 5 and 480 minutes, multiple of 5; `409` if the name exists) |
-| `PATCH` | `/services/:id` | Admin         | Updates a service. Services are deactivated (`active: false`), never deleted                    |
+| Method  | Path            | Access | Description                                                                                     |
+| ------- | --------------- | ------ | ----------------------------------------------------------------------------------------------- |
+| `GET`   | `/services`     | Public | Lists active services; admins can add `?includeInactive=true`                                   |
+| `GET`   | `/services/:id` | Public | Returns a service (inactive services are only visible to admins)                                |
+| `POST`  | `/services`     | Admin  | Creates a service (duration between 5 and 480 minutes, multiple of 5; `409` if the name exists) |
+| `PATCH` | `/services/:id` | Admin  | Updates a service. Services are deactivated (`active: false`), never deleted                    |
 
 ### Doctors
 
-| Method  | Path                    | Access        | Description                                                                                                         |
-| ------- | ----------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `GET`   | `/doctors`              | Authenticated | Lists active doctors with their services; filter `?serviceId=` and, for admins, `?includeInactive=true`             |
-| `GET`   | `/doctors/:id`          | Authenticated | Returns a doctor (inactive doctors are only visible to admins)                                                      |
-| `POST`  | `/doctors`              | Admin         | Creates the doctor's user account and profile in a single transaction (`409` if the email or license number exists) |
-| `PATCH` | `/doctors/:id`          | Admin         | Updates the doctor's profile (name, specialty, license number)                                                      |
-| `PUT`   | `/doctors/:id/services` | Admin         | Replaces the list of services the doctor offers (`{ "serviceIds": [...] }`)                                         |
+| Method  | Path                    | Access | Description                                                                                                         |
+| ------- | ----------------------- | ------ | ------------------------------------------------------------------------------------------------------------------- |
+| `GET`   | `/doctors`              | Public | Lists active doctors with their services; filter `?serviceId=` and, for admins, `?includeInactive=true`             |
+| `GET`   | `/doctors/:id`          | Public | Returns a doctor (inactive doctors are only visible to admins)                                                      |
+| `POST`  | `/doctors`              | Admin  | Creates the doctor's user account and profile in a single transaction (`409` if the email or license number exists) |
+| `PATCH` | `/doctors/:id`          | Admin  | Updates the doctor's profile (name, specialty, license number)                                                      |
+| `PUT`   | `/doctors/:id/services` | Admin  | Replaces the list of services the doctor offers (`{ "serviceIds": [...] }`)                                         |
+
+The clinic's services and doctors are public, so the website can show them to anyone. Without a session, and for patients, a doctor comes as a public profile: name, specialty, license number (public in Mexico) and the active services, without the user id, email or account status. Staff get the whole record. A request that does send the session cookie still needs a valid session (`401` otherwise).
 
 To enable or disable a doctor, use `PATCH /users/:userId` with `{ "active": false }`.
 
@@ -582,6 +584,7 @@ Each module groups its validation schema, types, data access, controller, routes
 The counters live in memory, so with more than one API instance they would need a shared store (e.g. Redis).
 
 - **Behind a proxy:** set `TRUST_PROXY` to the number of proxies in front of the API (load balancer, Nginx). Otherwise every client would share the proxy's IP in the rate limits and the audit log.
+- **Public catalog:** only `GET /services` and `GET /doctors` (and their `/:id`) work without a session, and they return no account data to visitors. Everything else, including doctors' schedules, needs a session.
 - **CORS:** not enabled. The web frontend is served from the same origin as the API, and mobile apps are not subject to CORS.
 
 ## Data privacy

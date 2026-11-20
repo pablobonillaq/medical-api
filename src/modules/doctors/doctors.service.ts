@@ -6,7 +6,7 @@ import type { Role } from '../users/users.schema.js'
 import { usersRepository } from '../users/users.repository.js'
 import { doctorsRepository } from './doctors.repository.js'
 import type { CreateDoctorInput, ListDoctorsQuery, UpdateDoctorInput } from './doctors.schema.js'
-import { toDoctorResponse } from './doctors.types.js'
+import { toDoctorResponse, toDoctorView } from './doctors.types.js'
 
 export const doctorsService = {
   async create({ email, password, ...profile }: CreateDoctorInput) {
@@ -22,20 +22,20 @@ export const doctorsService = {
     return toDoctorResponse(doctor)
   },
 
-  async list(query: ListDoctorsQuery, viewerRole: Role) {
+  async list(query: ListDoctorsQuery, viewerRole: Role | undefined) {
     const doctors = await doctorsRepository.findMany({
       serviceId: query.serviceId,
       includeInactive: query.includeInactive === true && viewerRole === 'admin',
     })
-    return doctors.map(toDoctorResponse)
+    return doctors.map((doctor) => toDoctorView(doctor, viewerRole))
   },
 
-  async getById(id: string, viewerRole: Role) {
+  async getById(id: string, viewerRole: Role | undefined) {
     const doctor = await doctorsRepository.findById(id)
     if (!doctor || (!doctor.user.active && viewerRole !== 'admin')) {
       throw new NotFoundError('Doctor not found')
     }
-    return toDoctorResponse(doctor)
+    return toDoctorView(doctor, viewerRole)
   },
 
   async update(id: string, input: UpdateDoctorInput) {
