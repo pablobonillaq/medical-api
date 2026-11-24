@@ -155,9 +155,10 @@ export const appointmentsService = {
       where.doctorId = doctor.id
     }
 
-    const { page, pageSize } = query
+    const { page, pageSize, order } = query
     const [appointments, total] = await appointmentsRepository.findMany({
       where,
+      order,
       ...toSkipTake({ page, pageSize }),
     })
     return { appointments: appointments.map(toAppointmentResponse), page, pageSize, total }

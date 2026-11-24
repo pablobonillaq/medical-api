@@ -23,6 +23,8 @@ export const listAppointmentsQuerySchema = paginationQuerySchema.extend({
   status: z.enum(AppointmentStatus, { error: 'Invalid status' }).optional(),
   doctorId: z.uuid({ error: 'Invalid doctor id' }).optional(),
   patientId: z.uuid({ error: 'Invalid patient id' }).optional(),
+  // By start time: earliest first (upcoming appointments) or latest first (history)
+  order: z.enum(['asc', 'desc'], { error: 'order must be asc or desc' }).default('asc'),
 })
 
 export const cancelAppointmentSchema = z.object({

@@ -56,10 +56,12 @@ export const appointmentsRepository = {
 
   findMany: ({
     where,
+    order,
     skip,
     take,
   }: {
     where: Prisma.AppointmentWhereInput
+    order: Prisma.SortOrder
     skip: number
     take: number
   }) =>
@@ -67,7 +69,7 @@ export const appointmentsRepository = {
       prisma.appointment.findMany({
         where,
         include: appointmentInclude,
-        orderBy: { startsAt: 'asc' },
+        orderBy: { startsAt: order },
         skip,
         take,
       }),

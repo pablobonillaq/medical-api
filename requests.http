@@ -823,6 +823,10 @@ Content-Type: application/json
 # El paciente lista sus citas → 200 (solo las suyas)
 GET {{baseUrl}}/appointments
 
+### Patient's history, latest first → 200
+# Historial del paciente, la más reciente primero → 200
+GET {{baseUrl}}/appointments?to={{$datetime iso8601}}&order=desc
+
 ### Patient filters by another patient → 200, still only their own
 # El paciente filtra por otro paciente → 200, sigue viendo solo las suyas
 GET {{baseUrl}}/appointments?patientId={{createWalkInPatient.response.body.$.patient.id}}

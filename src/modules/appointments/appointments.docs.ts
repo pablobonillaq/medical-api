@@ -29,10 +29,11 @@ export const appointmentsPaths: ZodOpenApiPathsObject = {
       summary: 'List appointments',
       description:
         'Staff see every appointment; patients and doctors only their own, whatever filters ' +
-        'they send. `from` and `to` filter by start time.',
+        'they send. `from` and `to` filter by start time. `order=desc` lists the latest first, ' +
+        'as a history does.',
       requestParams: { query: listAppointmentsQuerySchema },
       responses: {
-        200: { description: 'One page of appointments, earliest first' },
+        200: { description: 'One page of appointments, earliest first unless order=desc' },
         ...errors(400, 401, 404),
       },
     },

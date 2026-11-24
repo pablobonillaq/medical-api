@@ -26,6 +26,7 @@ type Patient = Awaited<ReturnType<typeof createPatient>>
 interface AppointmentBody {
   patientId: string
   doctorId: string
+  startsAt: string
 }
 
 describe('appointment rules (integration)', () => {
@@ -197,6 +198,18 @@ describe('appointment rules (integration)', () => {
 
       expect((await list(asEmployee, { from: now })).body.total).toBe(2)
       expect((await list(asEmployee, { to: now })).body.total).toBe(1)
+    })
+
+    it('lists the earliest first, or the latest first with order=desc', async () => {
+      const startTimes = (response: { body: { appointments: AppointmentBody[] } }) =>
+        response.body.appointments.map((a) => Date.parse(a.startsAt))
+
+      const earliestFirst = startTimes(await list(asEmployee))
+      const latestFirst = startTimes(await list(asEmployee, { order: 'desc' }))
+
+      expect(earliestFirst).toEqual([...earliestFirst].sort((a, b) => a - b))
+      expect(latestFirst).toEqual([...earliestFirst].reverse())
+      await asEmployee.get('/appointments').query({ order: 'newest' }).expect(400)
     })
 
     it('patients only see their own appointments, whatever filters they send', async () => {
